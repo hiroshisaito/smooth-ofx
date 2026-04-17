@@ -23,12 +23,10 @@
 template<typename PixelType>
 void downMode_LeftCountLength(BlendingInfo<PixelType> *info)
 {
-    PF_LayerDef *output         = info->output;
-
     long        count_target = 0;
     int         len = 1,
-                width           = GET_WIDTH(info->input),
-                height          = output->height;
+                width           = info->in_stride,
+                height          = info->height;
     u_int       *flg            = &info->core[0].flg;
 
     while(1)
@@ -114,12 +112,10 @@ void downMode_LeftCountLength(BlendingInfo<PixelType> *info)
 template<typename PixelType>
 void downMode_RightCountLength(BlendingInfo<PixelType> *info)
 {
-    PF_LayerDef *output         = info->output;
-
     long        count_target = 0;
     int         len = 0,
-                width           = GET_WIDTH(info->input),
-                height          = output->height;
+                width           = info->in_stride,
+                height          = info->height;
     u_int       *flg            = &info->core[1].flg;
 
     // 始めの1回は左の方だけ検査 //
@@ -226,12 +222,10 @@ void downMode_RightCountLength(BlendingInfo<PixelType> *info)
 template<typename PixelType>
 void downMode_TopCountLength( BlendingInfo<PixelType> *info)
 {
-    PF_LayerDef *output         = info->output;
-
     long        count_target = 0;
     int         len = 1,
-                width           = GET_WIDTH(info->input),
-                height          = output->height;
+                width           = info->in_stride,
+                height          = info->height;
     u_int       *flg            = &info->core[2].flg;
 
     
@@ -321,12 +315,10 @@ void downMode_TopCountLength( BlendingInfo<PixelType> *info)
 template<typename PixelType>
 void downMode_BottomCountLength( BlendingInfo<PixelType> *info)
 {
-    PF_LayerDef *output         = info->output;
-
     long        count_target = 0;
     int         len = 0,
-                width           = GET_WIDTH(info->input),
-                height          = output->height;
+                width           = info->in_stride,
+                height          = info->height;
     u_int       *flg            = &info->core[3].flg;
 
     //----------------------------------------------------------//
@@ -460,7 +452,7 @@ void downMode_LeftBlending( BlendingInfo<PixelType>    *info )
     int         t;
     float       start   = info->core[0].start;
     float       end     = info->core[0].end;
-    int         in_width    = GET_WIDTH(info->input);
+    int         in_width    = info->in_stride;
 
     // 通常Length の値は半分にしてつかうけど今回は単位が1/2ピクセル単位なので2倍、len*(1/2)*2=len
     // でそのまま使える
@@ -543,7 +535,7 @@ void downMode_RightBlending(BlendingInfo<PixelType>    *info )
     long        length  = info->core[1].length;
     float       start   = info->core[1].start;
     float       end     = info->core[1].end;
-    int         in_width    = GET_WIDTH(info->input);
+    int         in_width    = info->in_stride;
 #if 0
     else if(flg & CR_FLG_FILL)
     {
@@ -614,8 +606,8 @@ void downMode_TopBlending(  BlendingInfo<PixelType> *info  )
     long        t;
     float       start   = info->core[2].start;
     float       end     = info->core[2].end;
-    int         in_width    = GET_WIDTH(info->input);
-    int         out_width   = GET_WIDTH(info->output);
+    int         in_width    = info->in_stride;
+    int         out_width   = info->out_stride;
 
 #if 0
     else if(flg & CR_FLG_FILL)
@@ -685,8 +677,8 @@ void downMode_BottomBlending( BlendingInfo<PixelType> *info )
     long        length  = info->core[3].length;
     float       start   = info->core[3].start;
     float       end     = info->core[3].end;
-    int         in_width    = GET_WIDTH(info->input);
-    int         out_width   = GET_WIDTH(info->output);
+    int         in_width    = info->in_stride;
+    int         out_width   = info->out_stride;
 
 
     // 通常Length の値は半分にしてつかうけど今回は単位が半ピクセル単位なので2倍、len*(1/2)*2=len

@@ -589,9 +589,9 @@ template<typename PixelType>
 void Link8Mode02Execute(BlendingInfo<PixelType> *info)
 {
 
-    int         in_width    = GET_WIDTH(info->input),
-                in_height   = GET_HEIGHT(info->input),
-    out_width   = GET_WIDTH(info->output);
+    int         in_width    = info->in_stride,
+                in_height   = info->height,
+    out_width   = info->out_stride;
     
     Link8Execute(   info, 
                     1,
@@ -610,9 +610,9 @@ void Link8Mode02Execute(BlendingInfo<PixelType> *info)
 template<typename PixelType>
 void Link8Mode04Execute(BlendingInfo<PixelType> *info)
 {
-    int         in_width    = GET_WIDTH(info->input),
-                in_height   = GET_HEIGHT(info->input),
-    out_width   = GET_WIDTH(info->output);
+    int         in_width    = info->in_stride,
+                in_height   = info->height,
+    out_width   = info->out_stride;
     
     Link8Execute(   info, 
                     1,
@@ -632,9 +632,9 @@ void Link8Mode04Execute(BlendingInfo<PixelType> *info)
 template<typename PixelType>
 void Link8Mode01Execute(BlendingInfo<PixelType> *info)
 {
-    int         in_width    = GET_WIDTH(info->input),
-                in_height   = GET_HEIGHT(info->input),
-    out_width   = GET_WIDTH(info->output);
+    int         in_width    = info->in_stride,
+                in_height   = info->height,
+    out_width   = info->out_stride;
     
     Link8Execute(   info, 
                     -in_width,
@@ -653,9 +653,9 @@ void Link8Mode01Execute(BlendingInfo<PixelType> *info)
 template<typename PixelType>
 void Link8Mode03Execute(BlendingInfo<PixelType> *info)
 {
-    int         in_width    = GET_WIDTH(info->input),
-                in_height   = GET_HEIGHT(info->input),
-    out_width   = GET_WIDTH(info->output);
+    int         in_width    = info->in_stride,
+                in_height   = info->height,
+    out_width   = info->out_stride;
     
     Link8Execute(   info, 
                     -in_width,
@@ -725,9 +725,9 @@ template<typename PixelType>
 void Link8SquareExecute( BlendingInfo<PixelType> *info )
 {
     PixelType	*in_ptr     = info->in_ptr;
-    int         in_width    = GET_WIDTH(info->input),
-                out_width   = GET_WIDTH(info->output),
-                in_height   = GET_HEIGHT(info->input);
+    int         in_width    = info->in_stride,
+                out_width   = info->out_stride,
+                in_height   = info->height;
     int         i;
     unsigned int flg=0;
 
