@@ -32,5 +32,5 @@ static OfxPlugin smoothPlugin = {
     pluginMain
 };
 
-OFXEXPORT int OfxGetNumberOfPlugins(void) { return 1; }
-OFXEXPORT OfxPlugin *OfxGetPlugin(int nth) { return nth == 0 ? &smoothPlugin : nullptr; }
+OfxExport int OfxGetNumberOfPlugins(void) { return 1; }
+OfxExport OfxPlugin *OfxGetPlugin(int nth) { return nth == 0 ? &smoothPlugin : nullptr; }
