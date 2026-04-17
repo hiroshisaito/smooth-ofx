@@ -1,0 +1,42 @@
+# ドキュメント類（作業用）
+/references/
+
+# ビルド成果物
+/build/
+/out/
+/install/
+*.ofx
+*.ofx.bundle/
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CPackConfig.cmake
+CPackSourceConfig.cmake
+_deps/
+
+# Windows / Visual Studio
+.vs/
+*.user
+*.suo
+*.VC.db
+*.VC.opendb
+*.obj
+*.lib
+*.exp
+*.pdb
+*.ilk
+
+# macOS（将来用）
+.DS_Store
+*.dylib
+
+# Linux（将来用）
+*.so
+
+# Conan（将来用）
+conan.lock
+conanbuildinfo.*
+conaninfo.txt
+graph_info.json

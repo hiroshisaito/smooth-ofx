@@ -1,0 +1,3 @@
+[submodule "include/openfx"]
+	path = include/openfx
+	url = https://github.com/AcademySoftwareFoundation/openfx
