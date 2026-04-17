@@ -3,6 +3,8 @@
 
 # ビルド成果物
 /build/
+/build-mingw/
+/build-msvc/
 /out/
 /install/
 *.ofx
