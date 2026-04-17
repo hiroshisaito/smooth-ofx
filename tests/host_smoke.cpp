@@ -1,0 +1,500 @@
+// host_smoke.cpp
+// ----------------------------------------------------------------------------
+// 最小限の OFX ホスト。smooth.ofx を LoadLibrary で読み込み、
+// setHost → onLoad → describe → describeInContext → createInstance → render
+// → destroyInstance → onUnload を順に駆動し、戻り値と描画結果を確認する。
+//
+// 目的: DaVinci Resolve 等の実機ホストを用意する前に、プラグインが
+//       「load/describe/パラメータ定義/最低限の render」までは落ちずに
+//       走ることを MSYS2 MINGW64 のコマンドラインで検証する。
+// ----------------------------------------------------------------------------
+
+#include <windows.h>
+
+#include <cstdarg>
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <map>
+#include <memory>
+#include <string>
+#include <vector>
+
+#include "ofxCore.h"
+#include "ofxImageEffect.h"
+#include "ofxMemory.h"
+#include "ofxMultiThread.h"
+#include "ofxParam.h"
+#include "ofxPixels.h"
+#include "ofxProperty.h"
+
+// ---------------------------------------------------------------------------
+// PropertySet: 任意の OFX プロパティを保持するシンプルな実装
+// ---------------------------------------------------------------------------
+struct PropertySet {
+    std::map<std::string, std::vector<int>>         ints;
+    std::map<std::string, std::vector<double>>      doubles;
+    std::map<std::string, std::vector<std::string>> strings;
+    std::map<std::string, std::vector<void *>>      pointers;
+
+    template <class Vec, class T>
+    static void ensureSize(Vec &v, int idx, T def)
+    {
+        if ((int)v.size() <= idx) v.resize(idx + 1, def);
+    }
+};
+
+#define PROP_SET_HANDLE(ps) reinterpret_cast<OfxPropertySetHandle>(ps)
+#define PROP_GET_HANDLE(h)  reinterpret_cast<PropertySet *>(h)
+
+// ---------------------------------------------------------------------------
+// Handle の簡易ラッパ (OfxImageEffectHandle / OfxImageClipHandle / OfxParamHandle)
+// ---------------------------------------------------------------------------
+struct ClipHandle {
+    std::string                          name;
+    std::unique_ptr<PropertySet>         props;       // clip 自身のプロパティ
+    std::unique_ptr<PropertySet>         imageProps;  // clipGetImage が返す画像プロパティ
+};
+
+struct ParamHandle {
+    std::string                          name;
+    std::unique_ptr<PropertySet>         props;
+};
+
+struct EffectHandle {
+    std::unique_ptr<PropertySet>         props;
+    std::map<std::string, std::unique_ptr<ClipHandle>>  clips;
+    std::map<std::string, std::unique_ptr<ParamHandle>> params;
+};
+
+// ---------------------------------------------------------------------------
+// OfxPropertySuiteV1 実装
+// ---------------------------------------------------------------------------
+static OfxStatus prop_set_pointer(OfxPropertySetHandle h, const char *name, int idx, void *v)
+{
+    auto *p = PROP_GET_HANDLE(h); auto &a = p->pointers[name];
+    PropertySet::ensureSize(a, idx, (void *)nullptr); a[idx] = v; return kOfxStatOK;
+}
+static OfxStatus prop_set_string(OfxPropertySetHandle h, const char *name, int idx, const char *v)
+{
+    auto *p = PROP_GET_HANDLE(h); auto &a = p->strings[name];
+    PropertySet::ensureSize(a, idx, std::string{}); a[idx] = v ? v : ""; return kOfxStatOK;
+}
+static OfxStatus prop_set_double(OfxPropertySetHandle h, const char *name, int idx, double v)
+{
+    auto *p = PROP_GET_HANDLE(h); auto &a = p->doubles[name];
+    PropertySet::ensureSize(a, idx, 0.0); a[idx] = v; return kOfxStatOK;
+}
+static OfxStatus prop_set_int(OfxPropertySetHandle h, const char *name, int idx, int v)
+{
+    auto *p = PROP_GET_HANDLE(h); auto &a = p->ints[name];
+    PropertySet::ensureSize(a, idx, 0); a[idx] = v; return kOfxStatOK;
+}
+static OfxStatus prop_set_pointerN(OfxPropertySetHandle, const char *, int, void *const *)            { return kOfxStatOK; }
+static OfxStatus prop_set_stringN (OfxPropertySetHandle, const char *, int, const char *const *)      { return kOfxStatOK; }
+static OfxStatus prop_set_doubleN (OfxPropertySetHandle h, const char *name, int N, const double *v)
+{
+    for (int i = 0; i < N; ++i) prop_set_double(h, name, i, v[i]); return kOfxStatOK;
+}
+static OfxStatus prop_set_intN(OfxPropertySetHandle h, const char *name, int N, const int *v)
+{
+    for (int i = 0; i < N; ++i) prop_set_int(h, name, i, v[i]); return kOfxStatOK;
+}
+
+static OfxStatus prop_get_pointer(OfxPropertySetHandle h, const char *name, int idx, void **out)
+{
+    auto *p = PROP_GET_HANDLE(h); auto it = p->pointers.find(name);
+    if (it == p->pointers.end() || (int)it->second.size() <= idx) { *out = nullptr; return kOfxStatErrUnknown; }
+    *out = it->second[idx]; return kOfxStatOK;
+}
+static OfxStatus prop_get_string(OfxPropertySetHandle h, const char *name, int idx, char **out)
+{
+    auto *p = PROP_GET_HANDLE(h); auto it = p->strings.find(name);
+    if (it == p->strings.end() || (int)it->second.size() <= idx) { *out = nullptr; return kOfxStatErrUnknown; }
+    *out = const_cast<char *>(it->second[idx].c_str()); return kOfxStatOK;
+}
+static OfxStatus prop_get_double(OfxPropertySetHandle h, const char *name, int idx, double *out)
+{
+    auto *p = PROP_GET_HANDLE(h); auto it = p->doubles.find(name);
+    if (it == p->doubles.end() || (int)it->second.size() <= idx) { *out = 0.0; return kOfxStatErrUnknown; }
+    *out = it->second[idx]; return kOfxStatOK;
+}
+static OfxStatus prop_get_int(OfxPropertySetHandle h, const char *name, int idx, int *out)
+{
+    auto *p = PROP_GET_HANDLE(h); auto it = p->ints.find(name);
+    if (it == p->ints.end() || (int)it->second.size() <= idx) { *out = 0; return kOfxStatErrUnknown; }
+    *out = it->second[idx]; return kOfxStatOK;
+}
+static OfxStatus prop_get_intN(OfxPropertySetHandle h, const char *name, int N, int *out)
+{
+    for (int i = 0; i < N; ++i) prop_get_int(h, name, i, &out[i]); return kOfxStatOK;
+}
+static OfxStatus prop_get_doubleN(OfxPropertySetHandle h, const char *name, int N, double *out)
+{
+    for (int i = 0; i < N; ++i) prop_get_double(h, name, i, &out[i]); return kOfxStatOK;
+}
+static OfxStatus prop_get_stringN (OfxPropertySetHandle, const char *, int, char **)                  { return kOfxStatOK; }
+static OfxStatus prop_get_pointerN(OfxPropertySetHandle, const char *, int, void **)                  { return kOfxStatOK; }
+static OfxStatus prop_reset(OfxPropertySetHandle, const char *)                                       { return kOfxStatOK; }
+static OfxStatus prop_get_dimension(OfxPropertySetHandle, const char *, int *d) { *d = 0; return kOfxStatOK; }
+
+static OfxPropertySuiteV1 gPropSuite = {
+    prop_set_pointer, prop_set_string, prop_set_double, prop_set_int,
+    prop_set_pointerN, prop_set_stringN, prop_set_doubleN, prop_set_intN,
+    prop_get_pointer, prop_get_string, prop_get_double, prop_get_int,
+    prop_get_pointerN, prop_get_stringN, prop_get_doubleN, prop_get_intN,
+    prop_reset, prop_get_dimension,
+};
+
+// ---------------------------------------------------------------------------
+// OfxImageEffectSuiteV1 実装 (必要な関数だけ)
+// ---------------------------------------------------------------------------
+static OfxStatus ie_getPropertySet(OfxImageEffectHandle h, OfxPropertySetHandle *out)
+{
+    auto *eff = reinterpret_cast<EffectHandle *>(h);
+    *out = PROP_SET_HANDLE(eff->props.get()); return kOfxStatOK;
+}
+static OfxStatus ie_getParamSet(OfxImageEffectHandle h, OfxParamSetHandle *out)
+{
+    *out = reinterpret_cast<OfxParamSetHandle>(h); return kOfxStatOK;   // EffectHandle ごと返す
+}
+static OfxStatus ie_clipDefine(OfxImageEffectHandle h, const char *name, OfxPropertySetHandle *out)
+{
+    auto *eff = reinterpret_cast<EffectHandle *>(h);
+    auto &slot = eff->clips[name];
+    if (!slot) { slot.reset(new ClipHandle{name, std::make_unique<PropertySet>(), nullptr}); }
+    *out = PROP_SET_HANDLE(slot->props.get()); return kOfxStatOK;
+}
+static OfxStatus ie_clipGetHandle(OfxImageEffectHandle h, const char *name,
+                                  OfxImageClipHandle *clipOut, OfxPropertySetHandle *propsOut)
+{
+    auto *eff = reinterpret_cast<EffectHandle *>(h);
+    auto it = eff->clips.find(name);
+    if (it == eff->clips.end()) return kOfxStatErrUnknown;
+    *clipOut = reinterpret_cast<OfxImageClipHandle>(it->second.get());
+    if (propsOut) *propsOut = PROP_SET_HANDLE(it->second->props.get());
+    return kOfxStatOK;
+}
+static OfxStatus ie_clipGetPropertySet(OfxImageClipHandle h, OfxPropertySetHandle *out)
+{
+    auto *c = reinterpret_cast<ClipHandle *>(h);
+    *out = PROP_SET_HANDLE(c->props.get()); return kOfxStatOK;
+}
+static OfxStatus ie_clipGetImage(OfxImageClipHandle h, OfxTime, const OfxRectD *,
+                                 OfxPropertySetHandle *out)
+{
+    auto *c = reinterpret_cast<ClipHandle *>(h);
+    if (!c->imageProps) return kOfxStatFailed;
+    *out = PROP_SET_HANDLE(c->imageProps.get()); return kOfxStatOK;
+}
+static OfxStatus ie_clipReleaseImage(OfxPropertySetHandle)       { return kOfxStatOK; }
+static int       ie_abort(OfxImageEffectHandle)                  { return 0; }
+static OfxStatus ie_stub(...)                                    { return kOfxStatErrUnsupported; }
+static OfxStatus ie_clipGetRoD(OfxImageClipHandle, OfxTime, OfxRectD *)      { return kOfxStatErrUnsupported; }
+
+static OfxImageEffectSuiteV1 gImageEffectSuite = {
+    ie_getPropertySet,
+    ie_getParamSet,
+    ie_clipDefine,
+    ie_clipGetHandle,
+    ie_clipGetPropertySet,
+    ie_clipGetImage,
+    ie_clipReleaseImage,
+    ie_clipGetRoD,
+    ie_abort,
+    reinterpret_cast<OfxStatus (*)(OfxImageEffectHandle, size_t, OfxImageMemoryHandle *)>(ie_stub), // imageMemoryAlloc
+    reinterpret_cast<OfxStatus (*)(OfxImageMemoryHandle)>(ie_stub),          // imageMemoryFree
+    reinterpret_cast<OfxStatus (*)(OfxImageMemoryHandle, void **)>(ie_stub), // imageMemoryLock
+    reinterpret_cast<OfxStatus (*)(OfxImageMemoryHandle)>(ie_stub),          // imageMemoryUnlock
+};
+
+// ---------------------------------------------------------------------------
+// OfxParameterSuiteV1 実装
+// ---------------------------------------------------------------------------
+static OfxStatus param_define(OfxParamSetHandle h, const char *type, const char *name,
+                              OfxPropertySetHandle *out)
+{
+    auto *eff = reinterpret_cast<EffectHandle *>(h);
+    auto &slot = eff->params[name];
+    if (!slot) { slot.reset(new ParamHandle{name, std::make_unique<PropertySet>()}); }
+    // type を参照プロパティとして記録
+    prop_set_string(PROP_SET_HANDLE(slot->props.get()), kOfxParamPropType, 0, type);
+    *out = PROP_SET_HANDLE(slot->props.get()); return kOfxStatOK;
+}
+static OfxStatus param_get_handle(OfxParamSetHandle h, const char *name,
+                                  OfxParamHandle *out, OfxPropertySetHandle *propsOut)
+{
+    auto *eff = reinterpret_cast<EffectHandle *>(h);
+    auto it = eff->params.find(name);
+    if (it == eff->params.end()) return kOfxStatErrUnknown;
+    *out = reinterpret_cast<OfxParamHandle>(it->second.get());
+    if (propsOut) *propsOut = PROP_SET_HANDLE(it->second->props.get());
+    return kOfxStatOK;
+}
+static OfxStatus param_get_props(OfxParamHandle h, OfxPropertySetHandle *out)
+{
+    auto *p = reinterpret_cast<ParamHandle *>(h);
+    *out = PROP_SET_HANDLE(p->props.get()); return kOfxStatOK;
+}
+// paramGetValue / paramGetValueAtTime: デフォルト値 (kOfxParamPropDefault) を返す。可変長引数。
+static OfxStatus param_get_value(OfxParamHandle h, ...)
+{
+    auto *p = reinterpret_cast<ParamHandle *>(h);
+    std::string type;
+    { char *t = nullptr; prop_get_string(PROP_SET_HANDLE(p->props.get()), kOfxParamPropType, 0, &t); if (t) type = t; }
+
+    va_list ap; va_start(ap, h);
+    if (type == kOfxParamTypeBoolean || type == kOfxParamTypeInteger) {
+        int *dst = va_arg(ap, int *);
+        int def = 0; prop_get_int(PROP_SET_HANDLE(p->props.get()), kOfxParamPropDefault, 0, &def);
+        if (dst) *dst = def;
+    } else if (type == kOfxParamTypeDouble) {
+        double *dst = va_arg(ap, double *);
+        double def = 0.0; prop_get_double(PROP_SET_HANDLE(p->props.get()), kOfxParamPropDefault, 0, &def);
+        if (dst) *dst = def;
+    } else if (type == kOfxParamTypeRGBA || type == kOfxParamTypeRGB ||
+               type == kOfxParamTypeDouble2D || type == kOfxParamTypeDouble3D) {
+        // 未使用だがクラッシュ防止
+        for (int i = 0; i < 4; ++i) (void)va_arg(ap, double *);
+    }
+    va_end(ap);
+    return kOfxStatOK;
+}
+static OfxStatus param_get_value_at_time(OfxParamHandle h, OfxTime t, ...)
+{
+    auto *p = reinterpret_cast<ParamHandle *>(h);
+    std::string type;
+    { char *ts = nullptr; prop_get_string(PROP_SET_HANDLE(p->props.get()), kOfxParamPropType, 0, &ts); if (ts) type = ts; }
+    (void)t;
+
+    va_list ap; va_start(ap, t);
+    if (type == kOfxParamTypeBoolean || type == kOfxParamTypeInteger) {
+        int *dst = va_arg(ap, int *);
+        int def = 0; prop_get_int(PROP_SET_HANDLE(p->props.get()), kOfxParamPropDefault, 0, &def);
+        if (dst) *dst = def;
+    } else if (type == kOfxParamTypeDouble) {
+        double *dst = va_arg(ap, double *);
+        double def = 0.0; prop_get_double(PROP_SET_HANDLE(p->props.get()), kOfxParamPropDefault, 0, &def);
+        if (dst) *dst = def;
+    }
+    va_end(ap);
+    return kOfxStatOK;
+}
+
+static OfxStatus param_stub(...) { return kOfxStatErrUnsupported; }
+
+static OfxParameterSuiteV1 gParamSuite = {
+    param_define,
+    param_get_handle,
+    reinterpret_cast<OfxStatus (*)(OfxParamSetHandle, OfxPropertySetHandle *)>(param_stub),    // paramSetGetPropertySet
+    param_get_props,
+    param_get_value,
+    param_get_value_at_time,
+    reinterpret_cast<OfxStatus (*)(OfxParamHandle, OfxTime, ...)>(param_stub),                 // paramGetDerivative
+    reinterpret_cast<OfxStatus (*)(OfxParamHandle, OfxTime, OfxTime, ...)>(param_stub),        // paramGetIntegral
+    reinterpret_cast<OfxStatus (*)(OfxParamHandle, ...)>(param_stub),                          // paramSetValue
+    reinterpret_cast<OfxStatus (*)(OfxParamHandle, OfxTime, ...)>(param_stub),                 // paramSetValueAtTime
+    reinterpret_cast<OfxStatus (*)(OfxParamHandle, unsigned int *)>(param_stub),               // paramGetNumKeys
+    reinterpret_cast<OfxStatus (*)(OfxParamHandle, unsigned int, OfxTime *)>(param_stub),      // paramGetKeyTime
+    reinterpret_cast<OfxStatus (*)(OfxParamHandle, OfxTime, int, int *)>(param_stub),          // paramGetKeyIndex
+    reinterpret_cast<OfxStatus (*)(OfxParamHandle, OfxTime)>(param_stub),                      // paramDeleteKey
+    reinterpret_cast<OfxStatus (*)(OfxParamHandle)>(param_stub),                               // paramDeleteAllKeys
+    reinterpret_cast<OfxStatus (*)(OfxParamHandle, OfxParamHandle, OfxTime, const OfxRangeD *)>(param_stub), // paramCopy
+    reinterpret_cast<OfxStatus (*)(OfxParamSetHandle, const char *)>(param_stub),              // paramEditBegin
+    reinterpret_cast<OfxStatus (*)(OfxParamSetHandle)>(param_stub),                            // paramEditEnd
+};
+
+// ---------------------------------------------------------------------------
+// ホスト情報 + fetchSuite
+// ---------------------------------------------------------------------------
+static PropertySet gHostProps;
+
+static const void *host_fetch_suite(OfxPropertySetHandle, const char *name, int)
+{
+    if (std::strcmp(name, kOfxPropertySuite)   == 0) return &gPropSuite;
+    if (std::strcmp(name, kOfxImageEffectSuite) == 0) return &gImageEffectSuite;
+    if (std::strcmp(name, kOfxParameterSuite)   == 0) return &gParamSuite;
+    return nullptr;
+}
+
+static OfxHost gHost = {
+    PROP_SET_HANDLE(&gHostProps),
+    host_fetch_suite,
+};
+
+// ---------------------------------------------------------------------------
+// 画像バッファ作成ヘルパ (8bit RGBA、ストライプのテスト画像)
+// ---------------------------------------------------------------------------
+static void make_test_image(OfxRGBAColourB *buf, int w, int h)
+{
+    // 斜め階段パターン: y%2==0 の行は左半分が白、右半分が黒。
+    // smooth プラグインはピクセル境界の階段を検出してアンチエイリアス化する。
+    for (int y = 0; y < h; ++y) {
+        for (int x = 0; x < w; ++x) {
+            int step = x + y;
+            OfxRGBAColourB p;
+            if ((step / 4) % 2 == 0) { p.r = p.g = p.b = 0;   p.a = 255; }
+            else                      { p.r = p.g = p.b = 255; p.a = 255; }
+            buf[y * w + x] = p;
+        }
+    }
+}
+
+// PPM (P6) 出力
+static bool write_ppm(const char *path, const OfxRGBAColourB *buf, int w, int h)
+{
+    FILE *f = std::fopen(path, "wb");
+    if (!f) return false;
+    std::fprintf(f, "P6\n%d %d\n255\n", w, h);
+    for (int i = 0; i < w * h; ++i) {
+        std::fwrite(&buf[i].r, 1, 1, f);
+        std::fwrite(&buf[i].g, 1, 1, f);
+        std::fwrite(&buf[i].b, 1, 1, f);
+    }
+    std::fclose(f);
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// 画像プロパティ (clipGetImage の戻り) を仕込む
+// ---------------------------------------------------------------------------
+static void setup_image_props(PropertySet &ps, void *data, int w, int h,
+                              const char *pixelDepth, const char *components)
+{
+    prop_set_pointer(PROP_SET_HANDLE(&ps), kOfxImagePropData, 0, data);
+    int bounds[4] = { 0, 0, w, h };
+    prop_set_intN(PROP_SET_HANDLE(&ps), kOfxImagePropBounds, 4, bounds);
+    prop_set_intN(PROP_SET_HANDLE(&ps), kOfxImagePropRegionOfDefinition, 4, bounds);
+    prop_set_int(PROP_SET_HANDLE(&ps), kOfxImagePropRowBytes, 0, w * 4);
+    prop_set_string(PROP_SET_HANDLE(&ps), kOfxImageEffectPropPixelDepth, 0, pixelDepth);
+    prop_set_string(PROP_SET_HANDLE(&ps), kOfxImageEffectPropComponents, 0, components);
+}
+
+// ---------------------------------------------------------------------------
+// パラメータ一覧のダンプ (describeInContext 後)
+// ---------------------------------------------------------------------------
+static void dump_params(const EffectHandle &eff)
+{
+    for (auto &kv : eff.params) {
+        auto *props = kv.second->props.get();
+        char *type = nullptr, *label = nullptr;
+        prop_get_string(PROP_SET_HANDLE(props), kOfxParamPropType, 0, &type);
+        prop_get_string(PROP_SET_HANDLE(props), kOfxPropLabel,      0, &label);
+        std::printf("    param: name=%-14s type=%-8s label=%s\n",
+                    kv.first.c_str(),
+                    type ? type : "?",
+                    label ? label : "?");
+    }
+}
+static void dump_clips(const EffectHandle &eff)
+{
+    for (auto &kv : eff.clips) {
+        std::printf("    clip:  name=%s\n", kv.first.c_str());
+    }
+}
+
+// ---------------------------------------------------------------------------
+// main
+// ---------------------------------------------------------------------------
+int main(int argc, char **argv)
+{
+    const char *dllPath = (argc > 1) ? argv[1] : "build-mingw/smooth.ofx";
+    std::printf("[host-smoke] loading %s\n", dllPath);
+
+    HMODULE dll = LoadLibraryA(dllPath);
+    if (!dll) { std::printf("FAIL: LoadLibrary failed (error=%lu)\n", GetLastError()); return 1; }
+
+    typedef int           (*GetNumFn)(void);
+    typedef OfxPlugin *   (*GetPluginFn)(int);
+    GetNumFn    getNum    = (GetNumFn)    GetProcAddress(dll, "OfxGetNumberOfPlugins");
+    GetPluginFn getPlugin = (GetPluginFn) GetProcAddress(dll, "OfxGetPlugin");
+    if (!getNum || !getPlugin) { std::printf("FAIL: missing exports\n"); return 2; }
+
+    int n = getNum();
+    std::printf("[host-smoke] OfxGetNumberOfPlugins = %d\n", n);
+    if (n <= 0) { std::printf("FAIL: no plugins\n"); return 3; }
+
+    OfxPlugin *plugin = getPlugin(0);
+    if (!plugin) { std::printf("FAIL: OfxGetPlugin(0)=null\n"); return 4; }
+    std::printf("[host-smoke] plugin: api=%s v=%u id=%s ver=%u.%u\n",
+                plugin->pluginApi, plugin->apiVersion, plugin->pluginIdentifier,
+                plugin->pluginVersionMajor, plugin->pluginVersionMinor);
+
+    plugin->setHost(&gHost);
+
+    OfxStatus st;
+
+    // onLoad
+    st = plugin->mainEntry(kOfxActionLoad, nullptr, nullptr, nullptr);
+    std::printf("[host-smoke] kOfxActionLoad -> %d\n", st);
+    if (st != kOfxStatOK && st != kOfxStatReplyDefault) { std::printf("FAIL load\n"); return 5; }
+
+    // describe: effect ハンドルを用意
+    EffectHandle eff; eff.props = std::make_unique<PropertySet>();
+    PropertySet inArgs;
+    st = plugin->mainEntry(kOfxActionDescribe, &eff, nullptr, nullptr);
+    std::printf("[host-smoke] kOfxActionDescribe -> %d\n", st);
+    if (st != kOfxStatOK && st != kOfxStatReplyDefault) { std::printf("FAIL describe\n"); return 6; }
+
+    // describeInContext
+    prop_set_string(PROP_SET_HANDLE(&inArgs), kOfxImageEffectPropContext, 0, kOfxImageEffectContextFilter);
+    st = plugin->mainEntry(kOfxImageEffectActionDescribeInContext, &eff,
+                           PROP_SET_HANDLE(&inArgs), nullptr);
+    std::printf("[host-smoke] kOfxImageEffectActionDescribeInContext -> %d\n", st);
+    if (st != kOfxStatOK && st != kOfxStatReplyDefault) { std::printf("FAIL describeInContext\n"); return 7; }
+
+    std::printf("[host-smoke] defined clips/params:\n");
+    dump_clips(eff);
+    dump_params(eff);
+
+    // createInstance
+    prop_set_string(PROP_SET_HANDLE(eff.props.get()), kOfxImageEffectPropContext, 0, kOfxImageEffectContextFilter);
+    st = plugin->mainEntry(kOfxActionCreateInstance, &eff, nullptr, nullptr);
+    std::printf("[host-smoke] kOfxActionCreateInstance -> %d\n", st);
+    if (st != kOfxStatOK && st != kOfxStatReplyDefault) { std::printf("FAIL createInstance\n"); return 8; }
+
+    // 合成画像を用意して render を呼ぶ
+    const int W = 64, H = 32;
+    std::vector<OfxRGBAColourB> srcImg(W * H), dstImg(W * H);
+    make_test_image(srcImg.data(), W, H);
+    std::memset(dstImg.data(), 0, sizeof(OfxRGBAColourB) * W * H);
+
+    auto &srcClip = eff.clips[kOfxImageEffectSimpleSourceClipName];
+    auto &dstClip = eff.clips[kOfxImageEffectOutputClipName];
+    if (!srcClip || !dstClip) { std::printf("FAIL: clips not defined\n"); return 9; }
+    srcClip->imageProps = std::make_unique<PropertySet>();
+    dstClip->imageProps = std::make_unique<PropertySet>();
+    setup_image_props(*srcClip->imageProps, srcImg.data(), W, H, kOfxBitDepthByte, kOfxImageComponentRGBA);
+    setup_image_props(*dstClip->imageProps, dstImg.data(), W, H, kOfxBitDepthByte, kOfxImageComponentRGBA);
+
+    PropertySet renderArgs;
+    prop_set_double(PROP_SET_HANDLE(&renderArgs), kOfxPropTime, 0, 0.0);
+    int rw[4] = { 0, 0, W, H };
+    prop_set_intN(PROP_SET_HANDLE(&renderArgs), kOfxImageEffectPropRenderWindow, 4, rw);
+
+    st = plugin->mainEntry(kOfxImageEffectActionRender, &eff,
+                           PROP_SET_HANDLE(&renderArgs), nullptr);
+    std::printf("[host-smoke] kOfxImageEffectActionRender -> %d\n", st);
+
+    // 最低限の確認: 出力が全 0 ではない
+    int nonZero = 0;
+    for (auto &p : dstImg) if (p.r || p.g || p.b) { nonZero++; }
+    std::printf("[host-smoke] dst non-zero pixels: %d / %d\n", nonZero, W * H);
+
+    write_ppm("build-mingw/smoke_src.ppm", srcImg.data(), W, H);
+    write_ppm("build-mingw/smoke_dst.ppm", dstImg.data(), W, H);
+    std::printf("[host-smoke] wrote build-mingw/smoke_src.ppm and build-mingw/smoke_dst.ppm\n");
+
+    // destroyInstance
+    st = plugin->mainEntry(kOfxActionDestroyInstance, &eff, nullptr, nullptr);
+    std::printf("[host-smoke] kOfxActionDestroyInstance -> %d\n", st);
+
+    // onUnload
+    st = plugin->mainEntry(kOfxActionUnload, nullptr, nullptr, nullptr);
+    std::printf("[host-smoke] kOfxActionUnload -> %d\n", st);
+
+    FreeLibrary(dll);
+    std::printf("[host-smoke] DONE\n");
+    return 0;
+}

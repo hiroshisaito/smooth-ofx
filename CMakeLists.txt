@@ -66,3 +66,11 @@ endif()
 install(TARGETS smooth
     LIBRARY DESTINATION "${OFX_INSTALL_DIR}/smooth.ofx.bundle/Contents/Win64"
 )
+
+# --- スモークテスト用のミニホスト (Windows のみ) ---
+option(BUILD_TESTS "Build host smoke test" ON)
+if(BUILD_TESTS AND WIN32)
+    add_executable(host_smoke tests/host_smoke.cpp)
+    target_include_directories(host_smoke PRIVATE ${OFX_INCLUDE_DIR})
+    set_target_properties(host_smoke PROPERTIES CXX_STANDARD 17)
+endif()
