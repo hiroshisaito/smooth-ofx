@@ -747,29 +747,29 @@ void downMode_BottomBlending( BlendingInfo<PixelType> *info )
 
 
 // 明示的インスタンス化宣言
-template void downMode_LeftCountLength<PF_Pixel8>(BlendingInfo<PF_Pixel8> *info);
-template void downMode_LeftCountLength<PF_Pixel16>(BlendingInfo<PF_Pixel16> *info);
+template void downMode_LeftCountLength<OfxRGBAColourB>(BlendingInfo<OfxRGBAColourB> *info);
+template void downMode_LeftCountLength<OfxRGBAColourS>(BlendingInfo<OfxRGBAColourS> *info);
 
-template void downMode_RightCountLength<PF_Pixel8>(BlendingInfo<PF_Pixel8> *info);
-template void downMode_RightCountLength<PF_Pixel16>(BlendingInfo<PF_Pixel16> *info);
+template void downMode_RightCountLength<OfxRGBAColourB>(BlendingInfo<OfxRGBAColourB> *info);
+template void downMode_RightCountLength<OfxRGBAColourS>(BlendingInfo<OfxRGBAColourS> *info);
 
-template void downMode_TopCountLength<PF_Pixel8>(BlendingInfo<PF_Pixel8> *info);
-template void downMode_TopCountLength<PF_Pixel16>(BlendingInfo<PF_Pixel16> *info);
+template void downMode_TopCountLength<OfxRGBAColourB>(BlendingInfo<OfxRGBAColourB> *info);
+template void downMode_TopCountLength<OfxRGBAColourS>(BlendingInfo<OfxRGBAColourS> *info);
 
-template void downMode_BottomCountLength<PF_Pixel8>(BlendingInfo<PF_Pixel8> *info);
-template void downMode_BottomCountLength<PF_Pixel16>(BlendingInfo<PF_Pixel16> *info);
+template void downMode_BottomCountLength<OfxRGBAColourB>(BlendingInfo<OfxRGBAColourB> *info);
+template void downMode_BottomCountLength<OfxRGBAColourS>(BlendingInfo<OfxRGBAColourS> *info);
 
 
-template void downMode_LeftBlending<PF_Pixel8>( BlendingInfo<PF_Pixel8> *info);
-template void downMode_LeftBlending<PF_Pixel16>(BlendingInfo<PF_Pixel16> *info);
+template void downMode_LeftBlending<OfxRGBAColourB>( BlendingInfo<OfxRGBAColourB> *info);
+template void downMode_LeftBlending<OfxRGBAColourS>(BlendingInfo<OfxRGBAColourS> *info);
 
-template void downMode_RightBlending<PF_Pixel8>( BlendingInfo<PF_Pixel8> *info);
-template void downMode_RightBlending<PF_Pixel16>(BlendingInfo<PF_Pixel16> *info);
+template void downMode_RightBlending<OfxRGBAColourB>( BlendingInfo<OfxRGBAColourB> *info);
+template void downMode_RightBlending<OfxRGBAColourS>(BlendingInfo<OfxRGBAColourS> *info);
 
-template void downMode_TopBlending<PF_Pixel8>( BlendingInfo<PF_Pixel8> *info);
-template void downMode_TopBlending<PF_Pixel16>(BlendingInfo<PF_Pixel16> *info);
+template void downMode_TopBlending<OfxRGBAColourB>( BlendingInfo<OfxRGBAColourB> *info);
+template void downMode_TopBlending<OfxRGBAColourS>(BlendingInfo<OfxRGBAColourS> *info);
 
-template void downMode_BottomBlending<PF_Pixel8>( BlendingInfo<PF_Pixel8> *info);
-template void downMode_BottomBlending<PF_Pixel16>(BlendingInfo<PF_Pixel16> *info);
+template void downMode_BottomBlending<OfxRGBAColourB>( BlendingInfo<OfxRGBAColourB> *info);
+template void downMode_BottomBlending<OfxRGBAColourS>(BlendingInfo<OfxRGBAColourS> *info);
 
 

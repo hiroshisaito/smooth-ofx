@@ -43,10 +43,10 @@ void LackMode01Execute( BlendingInfo<PixelType> *info )
         ref1 = in_ptr[ info->in_target+width ];
         ref2 = in_ptr[ info->in_target+width+1 ];
     
-        ref_temp.red    = (ref0.red     + ref1.red      + ref2.red)     / 3;
-        ref_temp.green  = (ref0.green   + ref1.green    + ref2.green)   / 3;
-        ref_temp.blue   = (ref0.blue    + ref1.blue     + ref2.blue)    / 3;
-        ref_temp.alpha  = (ref0.alpha   + ref1.alpha    + ref2.alpha)   / 3;
+        ref_temp.r    = (ref0.r     + ref1.r      + ref2.r)     / 3;
+        ref_temp.g  = (ref0.g   + ref1.g    + ref2.g)   / 3;
+        ref_temp.b   = (ref0.b    + ref1.b     + ref2.b)    / 3;
+        ref_temp.a  = (ref0.a   + ref1.a    + ref2.a)   / 3;
 
         BlendingPixelf( &src, &ref_temp, &info->out_ptr[ info->out_target ], 0.5f );
     
@@ -98,10 +98,10 @@ void LackMode02Execute( BlendingInfo<PixelType> *info )
         ref1 = in_ptr[ info->in_target-width ];
         ref2 = in_ptr[ info->in_target-width+1 ];
     
-        ref_temp.red    = (ref0.red     + ref1.red      + ref2.red)     / 3;
-        ref_temp.green  = (ref0.green   + ref1.green    + ref2.green)   / 3;
-        ref_temp.blue   = (ref0.blue    + ref1.blue     + ref2.blue)    / 3;
-        ref_temp.alpha  = (ref0.alpha   + ref1.alpha    + ref2.alpha)   / 3;
+        ref_temp.r    = (ref0.r     + ref1.r      + ref2.r)     / 3;
+        ref_temp.g  = (ref0.g   + ref1.g    + ref2.g)   / 3;
+        ref_temp.b   = (ref0.b    + ref1.b     + ref2.b)    / 3;
+        ref_temp.a  = (ref0.a   + ref1.a    + ref2.a)   / 3;
     
     
         BlendingPixelf( &src, &ref_temp, &info->out_ptr[ info->out_target ], 0.5f );
@@ -189,10 +189,10 @@ void LackMode0304Execute( BlendingInfo<PixelType> *info )
             ref1 = in_ptr[ info->in_target+width ];
             ref2 = in_ptr[ info->in_target+width-1 ];
 
-            ref_temp.red    = (ref0.red     + ref1.red      + ref2.red)     / 3;
-            ref_temp.green  = (ref0.green   + ref1.green    + ref2.green)   / 3;
-            ref_temp.blue   = (ref0.blue    + ref1.blue     + ref2.blue)    / 3;
-            ref_temp.alpha  = (ref0.alpha   + ref1.alpha    + ref2.alpha)   / 3;
+            ref_temp.r    = (ref0.r     + ref1.r      + ref2.r)     / 3;
+            ref_temp.g  = (ref0.g   + ref1.g    + ref2.g)   / 3;
+            ref_temp.b   = (ref0.b    + ref1.b     + ref2.b)    / 3;
+            ref_temp.a  = (ref0.a   + ref1.a    + ref2.a)   / 3;
 
             BlendingPixelf( &src, &ref_temp, &info->out_ptr[ info->out_target], 0.5f );
 
@@ -248,10 +248,10 @@ void LackMode0304Execute( BlendingInfo<PixelType> *info )
             ref1 = in_ptr[ info->in_target-width ];
             ref2 = in_ptr[ info->in_target-width-1 ];
 
-            ref_temp.red    = (ref0.red     + ref1.red      + ref2.red)     / 3;
-            ref_temp.green  = (ref0.green   + ref1.green    + ref2.green)   / 3;
-            ref_temp.blue   = (ref0.blue    + ref1.blue     + ref2.blue)    / 3;
-            ref_temp.alpha  = (ref0.alpha   + ref1.alpha    + ref2.alpha)   / 3;
+            ref_temp.r    = (ref0.r     + ref1.r      + ref2.r)     / 3;
+            ref_temp.g  = (ref0.g   + ref1.g    + ref2.g)   / 3;
+            ref_temp.b   = (ref0.b    + ref1.b     + ref2.b)    / 3;
+            ref_temp.a  = (ref0.a   + ref1.a    + ref2.a)   / 3;
 
             BlendingPixelf( &src, &ref_temp, &info->out_ptr[ info->out_target ], 0.5f );
             
@@ -267,12 +267,12 @@ void LackMode0304Execute( BlendingInfo<PixelType> *info )
 
 
 // 明示的インスタンス化宣言
-template void LackMode01Execute<PF_Pixel8>( BlendingInfo<PF_Pixel8> *info );
-template void LackMode01Execute<PF_Pixel16>( BlendingInfo<PF_Pixel16> *info );
+template void LackMode01Execute<OfxRGBAColourB>( BlendingInfo<OfxRGBAColourB> *info );
+template void LackMode01Execute<OfxRGBAColourS>( BlendingInfo<OfxRGBAColourS> *info );
 
-template void LackMode02Execute<PF_Pixel8>( BlendingInfo<PF_Pixel8> *info );
-template void LackMode02Execute<PF_Pixel16>( BlendingInfo<PF_Pixel16> *info );
+template void LackMode02Execute<OfxRGBAColourB>( BlendingInfo<OfxRGBAColourB> *info );
+template void LackMode02Execute<OfxRGBAColourS>( BlendingInfo<OfxRGBAColourS> *info );
 
-template void LackMode0304Execute<PF_Pixel8>( BlendingInfo<PF_Pixel8> *info );
-template void LackMode0304Execute<PF_Pixel16>( BlendingInfo<PF_Pixel16> *info );
+template void LackMode0304Execute<OfxRGBAColourB>( BlendingInfo<OfxRGBAColourB> *info );
+template void LackMode0304Execute<OfxRGBAColourS>( BlendingInfo<OfxRGBAColourS> *info );
 

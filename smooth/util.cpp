@@ -8,34 +8,12 @@
 
 
 //---------------------------------------------------------------------------//
-// 概要   : 
-// 関数名 : 
-// 引数   : 
-// 返り値 : 
-//---------------------------------------------------------------------------//
-void PrintAPIErr( APIErr *perr)
-{
-
-#ifdef  AE_OS_WIN
-    wchar_t    str[1024];
-    swprintf( str, 1024, L"!! AEGP Err ( code : %d   file : %hs   line : %d )", perr->Err, perr->FileName.c_str(), perr->Line );
-    OutputDebugString( str );
-#else
-	char str[1024];
-	snprintf( str, 1024, "!! AEGP Err ( code : %d   file : %s   line : %d )", perr->Err, perr->FileName.c_str(), perr->Line );
-    printf( "%s", str );
-#endif
-
-}
-
-
-//---------------------------------------------------------------------------//
 // DEBUG system
 
 
 #ifdef  _DEBUG
 
-void DebugPrint(char *format, ...)
+void DebugPrint(const char *format, ...)
 {
 	char str[1024];
 	va_list args;
@@ -46,8 +24,11 @@ void DebugPrint(char *format, ...)
 
 	va_end(args);
 
+#ifdef _WIN32
 	OutputDebugStringA(str);
-    
+#else
+	fprintf(stderr, "%s", str);
+#endif
 }
 
 #endif  /* _DEBUG */
@@ -58,8 +39,7 @@ void DebugPrint(char *format, ...)
 //---------------------------------------------------------------------------//
 // スピード計測
 
-#if  _PROFILE
-#ifdef  AE_OS_WIN
+#if  _PROFILE && defined(_WIN32)
 
 
 #define MAX_PROFILE_INDEX	(16)
@@ -94,7 +74,7 @@ void EndProfile()
 			if( profile->isCounting )
 			{
 				time = (double)(profile->sum.QuadPart) / (double)freq.QuadPart;
-			
+
 				// オーバーヘッド計測
 				profile->isCounting = false;
 
@@ -134,7 +114,7 @@ void BeginProfileLap(int index)
 		profile->sum.QuadPart = 0LL;
 		profile->lapCount = 0;
 	}
-		
+
 	QueryPerformanceCounter( &profile->lapStart );	// 開始時間
 }
 
@@ -145,7 +125,7 @@ void EndProfileLap(int index)
 	if( profile->isCounting == true )
 	{
 		LARGE_INTEGER now;
-	
+
 		QueryPerformanceCounter( &now );
 
 		profile->sum.QuadPart += now.QuadPart - profile->lapStart.QuadPart;
@@ -153,15 +133,7 @@ void EndProfileLap(int index)
 	}
 }
 
-
-#else
-
-#endif  /* AE_OS_WIN */
-#endif  /* _DEBUG */
-
-
-
-
+#endif  /* _PROFILE && _WIN32 */
 
 
 
@@ -191,27 +163,28 @@ void CreateGanmmaTable(u_char table[256], float Ganmma)
 
 //---------------------------------------------------------------------------------------//
 //名前:     SetDebugPixel()
-//引数:     output : 出力画像
+//引数:     out_ptr : 出力画像へのポインタ
+//          out_stride : 出力画像の1行あたりピクセル数
 //			x : x座標
 //			y : y座標
 //返り値:   なし
 //概要:     デバック用に指定した座標に色を置く
 //---------------------------------------------------------------------------------------//
 template<typename PixelType>
-static inline void getDebugPixel(PixelType *p)	{ p->red=255; p->green=0; p->blue=0; p->alpha=255; }
+static inline void getDebugPixel(PixelType *p)	{ p->r=255; p->g=0; p->b=0; p->a=255; }
 
-template<> 
-inline void getDebugPixel<PF_Pixel16>(PF_Pixel16 *p)	{ p->red=0x8000; p->green=0; p->blue=0; p->alpha=0x8000; }
+template<>
+inline void getDebugPixel<OfxRGBAColourS>(OfxRGBAColourS *p)	{ p->r=0xFFFF; p->g=0; p->b=0; p->a=0xFFFF; }
 
-template<typename PixelType> void SetDebugPixel(PixelType *out_ptr, PF_LayerDef *output, int x, int y)
+template<typename PixelType> void SetDebugPixel(PixelType *out_ptr, int out_stride, int x, int y)
 {
 	PixelType	debug_pixel;
 	getDebugPixel( &debug_pixel );
 
-	out_ptr[y*GET_WIDTH(output) + x] = debug_pixel;
+	out_ptr[y*out_stride + x] = debug_pixel;
 }
 
-template<typename PixelType> void SetDebugPixel(PixelType *out_ptr, PF_LayerDef *output, long target )
+template<typename PixelType> void SetDebugPixel(PixelType *out_ptr, long target )
 {
 	PixelType	debug_pixel;
 	getDebugPixel( &debug_pixel );
@@ -220,23 +193,23 @@ template<typename PixelType> void SetDebugPixel(PixelType *out_ptr, PF_LayerDef 
 }
 
 // 明示的インスタンス化
-template void SetDebugPixel<PF_Pixel16>(PF_Pixel16 *out_ptr, PF_LayerDef *output, int x, int y);
-template void SetDebugPixel<PF_Pixel8>(PF_Pixel8 *out_ptr, PF_LayerDef *output, int x, int y);
+template void SetDebugPixel<OfxRGBAColourS>(OfxRGBAColourS *out_ptr, int out_stride, int x, int y);
+template void SetDebugPixel<OfxRGBAColourB>(OfxRGBAColourB *out_ptr, int out_stride, int x, int y);
 
-template void SetDebugPixel<PF_Pixel16>(PF_Pixel16 *out_ptr, PF_LayerDef *output, long target );
-template void SetDebugPixel<PF_Pixel8>(PF_Pixel8 *out_ptr, PF_LayerDef *output, long target);
+template void SetDebugPixel<OfxRGBAColourS>(OfxRGBAColourS *out_ptr, long target );
+template void SetDebugPixel<OfxRGBAColourB>(OfxRGBAColourB *out_ptr, long target);
 
 
 
 
 //---------------------------------------------------------------------------//
-// 概要   : 
-// 関数名 : 
-// 引数   : 
-// 返り値 : 
+// 概要   :
+// 関数名 :
+// 引数   :
+// 返り値 :
 //---------------------------------------------------------------------------//
 template<typename PixelType>
-void BlendLine(     BlendingInfo<PixelType>    *pinfo,                 // 
+void BlendLine(     BlendingInfo<PixelType>    *pinfo,                 //
                     double          length,                 // このパターンの長さ
                     long            blend_target,           // ブレンド元のターゲット(input)
                     long            out_target,             // ブレンド先のターゲット(output)
@@ -249,7 +222,7 @@ void BlendLine(     BlendingInfo<PixelType>    *pinfo,                 //
     double  len;
     int     blend_count;            // ブレンドするピクセルの数 切り上げ
     double  pre_ratio       = 0.0;
-    
+
     if( no_line_weight )
         len = (length * 0.5 ); // 全体の底辺
     else
@@ -261,10 +234,10 @@ void BlendLine(     BlendingInfo<PixelType>    *pinfo,                 //
     // 境界の逆方向からブレンドを行うので、その分移動 //
     blend_target    += (blend_count-1) * next_pixel_step_in;
     out_target      += (blend_count-1) * next_pixel_step_out;
-    
+
 
     // 全体の～ : ブレンド全体の三角形、 なし :そのピクセルの三角形
-    // 底辺×高さ÷２ = 底辺×((底辺/全体の底辺)×全体の高さ)÷２ 
+    // 底辺×高さ÷２ = 底辺×((底辺/全体の底辺)×全体の高さ)÷２
     //                          ↑相似な三角形なので
     // = l(底辺) * l(底辺) * 0.5(全体の高さ) * 0.5(÷2) / len(全体の底辺)
     int t;
@@ -291,22 +264,22 @@ void BlendLine(     BlendingInfo<PixelType>    *pinfo,                 //
 
 
 // 明示的インスタンス化宣言
-template void BlendLine<PF_Pixel8>(BlendingInfo<PF_Pixel8>    *pinfo, 
-								   double          length,              
-								   long            blend_target,        
-								   long            out_target,          
-								   int             ref_offset,          
-								   int             next_pixel_step_in,  
-								   int             next_pixel_step_out, 
+template void BlendLine<OfxRGBAColourB>(BlendingInfo<OfxRGBAColourB>    *pinfo,
+								   double          length,
+								   long            blend_target,
+								   long            out_target,
+								   int             ref_offset,
+								   int             next_pixel_step_in,
+								   int             next_pixel_step_out,
 								   bool            ratio_invert,
 								   bool            no_line_weight);
 
-template void BlendLine<PF_Pixel16>(BlendingInfo<PF_Pixel16>    *pinfo, 
-								    double          length,              
-								    long            blend_target,        
-								    long            out_target,          
-								    int             ref_offset,          
-								    int             next_pixel_step_in,  
-								    int             next_pixel_step_out, 
+template void BlendLine<OfxRGBAColourS>(BlendingInfo<OfxRGBAColourS>    *pinfo,
+								    double          length,
+								    long            blend_target,
+								    long            out_target,
+								    int             ref_offset,
+								    int             next_pixel_step_in,
+								    int             next_pixel_step_out,
 								    bool            ratio_invert,
 								    bool            no_line_weight);

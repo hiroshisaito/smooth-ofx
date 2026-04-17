@@ -451,10 +451,10 @@ static void Link8Execute(   BlendingInfo<PixelType> *info,
             if( (i < len[0] && inside_flg[0] == true) &&
                 (i < len[1] && inside_flg[1] == true) )
             {
-                out_ptr[out_target + i * NextPixelStepOut].red     = (TempPixel[0][i].red     +  TempPixel[1][i].red)     / 2;
-                out_ptr[out_target + i * NextPixelStepOut].green   = (TempPixel[0][i].green   +  TempPixel[1][i].green)   / 2;
-                out_ptr[out_target + i * NextPixelStepOut].blue    = (TempPixel[0][i].blue    +  TempPixel[1][i].blue)    / 2;
-                out_ptr[out_target + i * NextPixelStepOut].alpha   = (TempPixel[0][i].alpha   +  TempPixel[1][i].alpha)   / 2;
+                out_ptr[out_target + i * NextPixelStepOut].r     = (TempPixel[0][i].r     +  TempPixel[1][i].r)     / 2;
+                out_ptr[out_target + i * NextPixelStepOut].g   = (TempPixel[0][i].g   +  TempPixel[1][i].g)   / 2;
+                out_ptr[out_target + i * NextPixelStepOut].b    = (TempPixel[0][i].b    +  TempPixel[1][i].b)    / 2;
+                out_ptr[out_target + i * NextPixelStepOut].a   = (TempPixel[0][i].a   +  TempPixel[1][i].a)   / 2;
             }
             else if( i < len[0] && inside_flg[0] == true)
             {   // 0側だけ
@@ -768,18 +768,18 @@ void Link8SquareExecute( BlendingInfo<PixelType> *info )
             }
             
             // ついでに合計しとく
-            sum_color[0] += temp_pixel[i].red;
-            sum_color[1] += temp_pixel[i].green;
-            sum_color[2] += temp_pixel[i].blue;
-            sum_color[3] += temp_pixel[i].alpha;
+            sum_color[0] += temp_pixel[i].r;
+            sum_color[1] += temp_pixel[i].g;
+            sum_color[2] += temp_pixel[i].b;
+            sum_color[3] += temp_pixel[i].a;
         }
 
 
         // 出力
-        info->out_ptr[ info->out_target ].red      = sum_color[0] / 4;
-        info->out_ptr[ info->out_target ].green    = sum_color[1] / 4;
-        info->out_ptr[ info->out_target ].blue     = sum_color[2] / 4;
-        info->out_ptr[ info->out_target ].alpha    = sum_color[3] / 4;
+        info->out_ptr[ info->out_target ].r      = sum_color[0] / 4;
+        info->out_ptr[ info->out_target ].g    = sum_color[1] / 4;
+        info->out_ptr[ info->out_target ].b     = sum_color[2] / 4;
+        info->out_ptr[ info->out_target ].a    = sum_color[3] / 4;
 
     }
 
@@ -895,20 +895,20 @@ void Link8SquareExecute( BlendingInfo<PixelType> *info )
 
 
 // 明示的インスタンス化
-template void Link8Mode01Execute<PF_Pixel8>(BlendingInfo<PF_Pixel8> *pInfo);
-template void Link8Mode01Execute<PF_Pixel16>(BlendingInfo<PF_Pixel16> *pInfo);
+template void Link8Mode01Execute<OfxRGBAColourB>(BlendingInfo<OfxRGBAColourB> *pInfo);
+template void Link8Mode01Execute<OfxRGBAColourS>(BlendingInfo<OfxRGBAColourS> *pInfo);
 
-template void Link8Mode02Execute<PF_Pixel8>(BlendingInfo<PF_Pixel8> *pInfo);
-template void Link8Mode02Execute<PF_Pixel16>(BlendingInfo<PF_Pixel16> *pInfo);
+template void Link8Mode02Execute<OfxRGBAColourB>(BlendingInfo<OfxRGBAColourB> *pInfo);
+template void Link8Mode02Execute<OfxRGBAColourS>(BlendingInfo<OfxRGBAColourS> *pInfo);
 
-template void Link8Mode03Execute<PF_Pixel8>(BlendingInfo<PF_Pixel8> *pInfo);
-template void Link8Mode03Execute<PF_Pixel16>(BlendingInfo<PF_Pixel16> *pInfo);
+template void Link8Mode03Execute<OfxRGBAColourB>(BlendingInfo<OfxRGBAColourB> *pInfo);
+template void Link8Mode03Execute<OfxRGBAColourS>(BlendingInfo<OfxRGBAColourS> *pInfo);
 
-template void Link8Mode04Execute<PF_Pixel8>(BlendingInfo<PF_Pixel8> *pInfo);
-template void Link8Mode04Execute<PF_Pixel16>(BlendingInfo<PF_Pixel16> *pInfo);
+template void Link8Mode04Execute<OfxRGBAColourB>(BlendingInfo<OfxRGBAColourB> *pInfo);
+template void Link8Mode04Execute<OfxRGBAColourS>(BlendingInfo<OfxRGBAColourS> *pInfo);
 
-template void Link8SquareExecute<PF_Pixel8>( BlendingInfo<PF_Pixel8> *info );
-template void Link8SquareExecute<PF_Pixel16>( BlendingInfo<PF_Pixel16> *info );
+template void Link8SquareExecute<OfxRGBAColourB>( BlendingInfo<OfxRGBAColourB> *info );
+template void Link8SquareExecute<OfxRGBAColourS>( BlendingInfo<OfxRGBAColourS> *info );
 
 
 

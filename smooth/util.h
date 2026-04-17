@@ -6,54 +6,13 @@
 #include <string>
 #include <math.h>
 
-#include "AEConfig.h"
-
-#include "AE_Effect.h"
-#include "A.h"
-//#include "AE_EffectUI.h"
-//#include "SPSuites.h"
-//#include "AE_AdvEffectSuites.h"
-//#include "AE_EffectCBSuites.h"
-#include "AE_Macros.h"
-//#include "AE_GeneralPlug.h"
-
-#include "version.h"
+#include "ofxPixels.h"
 
 #include "define.h"
 
-#ifdef  AE_OS_WIN
+#ifdef _WIN32
 #include <windows.h>
 #endif
-
-//---------------------------------------------------------------------------//
-// エラー処理
-#define ACALL( fct)                                             \
-{                                                               \
-    if ( err == A_Err_NONE )                                    \
-        if (  A_Err_NONE != ( err = (fct) ))                    \
-            throw   APIErr( __FILE__, __LINE__, err );          \
-}
-
-
-struct APIErr
-{
-    A_Err           Err;
-    std::string     FileName;
-    int             Line;
-
-    APIErr( char *filename, int line, A_Err err )
-    {
-        Err         = err;
-        FileName    = filename;
-        Line        = line;
-    };
-};
-
-
-
-void PrintAPIErr( APIErr *perr);
-
-
 
 
 //---------------------------------------------------------------------------//
@@ -62,34 +21,26 @@ void PrintAPIErr( APIErr *perr);
 
 #include <stdarg.h>
 
-void DebugPrint(char *format, ...);
+void DebugPrint(const char *format, ...);
 
-#define DEBUG_STR( str )        OutputDebugStringA( (str) );
+#ifdef _WIN32
+#define DEBUG_STR( str )        OutputDebugStringA( (str) )
+#else
+#define DEBUG_STR( str )        ((void)0)
+#endif
 
 #else
 
 #define DEBUG_STR( str )        ((void)0)
 
-
 #endif  /* _DEBUG */
-
-
-#ifdef AE_OS_WIN
-
-#else
-
-// Mac
-#include <stdarg.h>
-void DebugPrint(char *format, ...);
-
-#endif
 
 
 //---------------------------------------------------------------------------//
 // スピード測定
 #define	_PROFILE	(0)
 
-#if _PROFILE 
+#if _PROFILE && defined(_WIN32)
 
 struct ProfileData
 {
@@ -123,7 +74,7 @@ void EndProfileLap(int index);
 #define BEGIN_LAP(x)		((void)0)
 #define END_LAP(x)			((void)0)
 
-#endif  /* _DEBUG */
+#endif
 
 
 
@@ -133,25 +84,10 @@ void EndProfileLap(int index);
 //---------------------------------------------------------------------------//
 
 
-
-
-//#define   GET_WIDTH(layer)        ((layer)->width + 4-(  (((layer)->width-1)%4)  +1)) 
-//#define   GET_WIDTH(layer)        ((layer)->width%4==0 ? (layer)->width : layer->width + 4-(layer->width%4))
-//#define   GET_WIDTH(layer)        ((layer)->width)
-#define GET_WIDTH(image)        ((image)->rowbytes/sizeof(PixelType)) // rowbytes = 横のバイト数 1ピクセル4バイトなので /4
-#define GET_HEIGHT(image)       ((image)->height)
-
-
-
-
-typedef unsigned long		KP_PIXEL32;	// 8bbit per channel
-typedef unsigned long long	KP_PIXEL64;	// 16bit per channel
-
+// ピクセルタイプごとの最大値
 template<typename PixelType> static inline unsigned int getMaxValue() { return ~0; }
-template <> inline unsigned int getMaxValue<PF_Pixel16>(){ return 0x8000; }
-template <> inline unsigned int getMaxValue<PF_Pixel8>()	{ return 0xff; }
-
-
+template <> inline unsigned int getMaxValue<OfxRGBAColourB>() { return 0xFF; }
+template <> inline unsigned int getMaxValue<OfxRGBAColourS>() { return 0xFFFF; }
 
 
 
@@ -160,7 +96,7 @@ template <> inline unsigned int getMaxValue<PF_Pixel8>()	{ return 0xff; }
 #define CEIL(a)         (int)ceil(a)    // floatの切り上げ //
 
 #ifndef MAX
-    #define MAX(a, b)   ((a) > (b) ? (a) : (b)) // AE側ヘッダーで定義されてる
+    #define MAX(a, b)   ((a) > (b) ? (a) : (b))
 #endif
 
 #ifndef MIN
@@ -170,7 +106,6 @@ template <> inline unsigned int getMaxValue<PF_Pixel8>()	{ return 0xff; }
 #ifndef ABS
     #define ABS(a)      ((a) < 0 ? -(a) : (a))
 #endif
-
 
 
 #define GET_SIGN(a)     ((a) / ABS((a)))            // 符号を得る マイナスだったら -1、プラスだったら+1
@@ -187,10 +122,6 @@ template <> inline unsigned int getMaxValue<PF_Pixel8>()	{ return 0xff; }
 //     Pixel比較関数
 //-------------------------------------//
 
-#define FAST_COMPARE_PIXEL(p1, p2)      (*(PackedPixelType*)&in_ptr[p1] != *(PackedPixelType*)&in_ptr[p2])
-
-
-#ifdef AE_OS_WIN
 #define ComparePixel(p0, p1)            RangeComparePixelNotEqual( &(info->in_ptr[p0]), &(info->in_ptr[p1]), info->range)
 #define ComparePixelEqual(p0, p1)       RangeComparePixelEqual( &(info->in_ptr[p0]), &(info->in_ptr[p1]), info->range)
 
@@ -203,11 +134,11 @@ template <typename PixelType>
 static inline bool RangeComparePixelNotEqual( const PixelType *p0, const PixelType *p1, const unsigned int range )
 {
     unsigned int delta;
-    delta = ABS(p0->red   - p1->red   ) +
-            ABS(p0->green - p1->green ) +
-            ABS(p0->blue  - p1->blue  ) + 
-            ABS(p0->alpha - p1->alpha );
-    
+    delta = ABS(p0->r - p1->r) +
+            ABS(p0->g - p1->g) +
+            ABS(p0->b - p1->b) +
+            ABS(p0->a - p1->a);
+
     return (delta > range);
 }
 
@@ -216,42 +147,29 @@ template <typename PixelType>
 static inline bool RangeComparePixelEqual( const PixelType *p0, const PixelType *p1, const unsigned int range )
 {
     unsigned int delta;
-    delta = ABS(p0->red   - p1->red   ) +
-            ABS(p0->green - p1->green ) +
-            ABS(p0->blue  - p1->blue  ) + 
-            ABS(p0->alpha - p1->alpha );
-    
+    delta = ABS(p0->r - p1->r) +
+            ABS(p0->g - p1->g) +
+            ABS(p0->b - p1->b) +
+            ABS(p0->a - p1->a);
+
     return (delta <= range);
 }
-#else
-// for Mac
-// うまくinline展開してくれないので
-#define ComparePixel(p0, p1) ((unsigned int)( ABS(info->in_ptr[p0].red   - info->in_ptr[p1].red) +    \
-								ABS(info->in_ptr[p0].green - info->in_ptr[p1].green) +  \
-								ABS(info->in_ptr[p0].blue  - info->in_ptr[p1].blue) +   \
-								ABS(info->in_ptr[p0].alpha - info->in_ptr[p1].alpha)) > info->range )
-
-#define ComparePixelEqual(p0, p1) ((unsigned int)(ABS(info->in_ptr[p0].red   - info->in_ptr[p1].red) +   \
-									ABS(info->in_ptr[p0].green - info->in_ptr[p1].green) + \
-									ABS(info->in_ptr[p0].blue  - info->in_ptr[p1].blue) +  \
-									ABS(info->in_ptr[p0].alpha - info->in_ptr[p1].alpha)) <= info->range )
-#endif
 
 // グラデーションを検知
 // 3つのピクセルの平均値とCenterのピクセルを比較して、range以下だったらtrue。
 // ref1,とcenterが別の色なのが前提
 template <typename PixelType>
-static inline bool DetectGradation( const PixelType *center, 
+static inline bool DetectGradation( const PixelType *center,
 									const PixelType *ref1,
 									const PixelType *ref2,
 									const unsigned int range )
 {
 	// 平均ピクセルを作る
 	PixelType	ave;
-	ave.red		= (center->red + ref1->red + ref2->red)/3;
-	ave.blue	= (center->blue + ref1->blue + ref2->blue)/3;
-	ave.green	= (center->green + ref1->green + ref2->green)/3;
-	ave.alpha	= (center->alpha + ref1->alpha + ref2->alpha)/3;
+	ave.r	= (center->r + ref1->r + ref2->r)/3;
+	ave.b	= (center->b + ref1->b + ref2->b)/3;
+	ave.g	= (center->g + ref1->g + ref2->g)/3;
+	ave.a	= (center->a + ref1->a + ref2->a)/3;
 
 	// centerと平均が同じで、そのほか２つとは別の色
     return RangeComparePixelEqual( center, &ave, 1 * 255 * 4 );
@@ -276,50 +194,50 @@ static inline void BlendingPixelf(  PixelType *target_pixel,
 
     r_alpha = max_value - alpha;
 
-    if(target_pixel->alpha == max_value && ref_pixel->alpha == max_value )
+    if(target_pixel->a == max_value && ref_pixel->a == max_value )
     {
 		// どちらも不透明
-        output_pixel->alpha     = max_value;
+        output_pixel->a     = max_value;
 
-        output_pixel->red       = (((target_pixel->red * alpha)+
-                                    (ref_pixel->red * r_alpha))/max_value);
-        output_pixel->green     = (((target_pixel->green * alpha)+
-                                    (ref_pixel->green * r_alpha))/max_value);
-        output_pixel->blue      = (((target_pixel->blue * alpha)+
-                                    (ref_pixel->blue * r_alpha))/max_value);
+        output_pixel->r     = (((target_pixel->r * alpha)+
+                                (ref_pixel->r * r_alpha))/max_value);
+        output_pixel->g     = (((target_pixel->g * alpha)+
+                                (ref_pixel->g * r_alpha))/max_value);
+        output_pixel->b     = (((target_pixel->b * alpha)+
+                                (ref_pixel->b * r_alpha))/max_value);
     }
-    else if(target_pixel->alpha == 0 )
+    else if(target_pixel->a == 0 )
     {
 		// ターゲットが抜き
-        output_pixel->alpha = (((target_pixel->alpha * alpha)+
-                                        (ref_pixel->alpha * r_alpha))/max_value);
+        output_pixel->a = (((target_pixel->a * alpha)+
+                                        (ref_pixel->a * r_alpha))/max_value);
 
-        output_pixel->red       = ref_pixel->red;
-        output_pixel->green     = ref_pixel->green;
-        output_pixel->blue      = ref_pixel->blue;
-        
+        output_pixel->r     = ref_pixel->r;
+        output_pixel->g     = ref_pixel->g;
+        output_pixel->b     = ref_pixel->b;
+
     }
-    else if(ref_pixel->alpha == 0 )
+    else if(ref_pixel->a == 0 )
     {
 		// refが抜き
-        output_pixel->alpha = (((target_pixel->alpha * alpha)+
-                                        (ref_pixel->alpha * r_alpha))/max_value);
+        output_pixel->a = (((target_pixel->a * alpha)+
+                                        (ref_pixel->a * r_alpha))/max_value);
 
-        output_pixel->red       = target_pixel->red;
-        output_pixel->green     = target_pixel->green;
-        output_pixel->blue      = target_pixel->blue;
+        output_pixel->r     = target_pixel->r;
+        output_pixel->g     = target_pixel->g;
+        output_pixel->b     = target_pixel->b;
     }
 	else
 	{
 		// 半透明
-        output_pixel->alpha = (((target_pixel->alpha * alpha)+
-                                        (ref_pixel->alpha * r_alpha))/max_value);
-        output_pixel->red       = (((target_pixel->red * alpha)+
-                                    (ref_pixel->red * r_alpha))/max_value);
-        output_pixel->green     = (((target_pixel->green * alpha)+
-                                    (ref_pixel->green * r_alpha))/max_value);
-        output_pixel->blue      = (((target_pixel->blue * alpha)+
-                                    (ref_pixel->blue * r_alpha))/max_value);
+        output_pixel->a = (((target_pixel->a * alpha)+
+                                        (ref_pixel->a * r_alpha))/max_value);
+        output_pixel->r     = (((target_pixel->r * alpha)+
+                                (ref_pixel->r * r_alpha))/max_value);
+        output_pixel->g     = (((target_pixel->g * alpha)+
+                                (ref_pixel->g * r_alpha))/max_value);
+        output_pixel->b     = (((target_pixel->b * alpha)+
+                                (ref_pixel->b * r_alpha))/max_value);
 	}
 }
 
@@ -332,7 +250,7 @@ static inline void Blendingf(   PixelType	*in_ptr,
                                 PixelType	*out_ptr,
                                 long        blend_target,
                                 long        ref_target,
-                                long        output_target,          
+                                long        output_target,
                                 float       ratio )
 {
     BlendingPixelf<PixelType>(	&(in_ptr[blend_target]),
@@ -347,22 +265,23 @@ void CreateGanmmaTable(u_char table[256], float Ganmma);
 
 
 ///// デバック色の種類 ///////
-template<typename PixelType> void SetDebugPixel(PixelType *out_ptr, PF_LayerDef *output, int x, int y);
-template<typename PixelType> void SetDebugPixel(PixelType *out_ptr, PF_LayerDef *output, long target );
+// OFX 移植版: PF_LayerDef を取らず、out_stride を直接受け取る
+template<typename PixelType> void SetDebugPixel(PixelType *out_ptr, int out_stride, int x, int y);
+template<typename PixelType> void SetDebugPixel(PixelType *out_ptr, long target );
 
 
 #ifdef _DEBUG
-#define DEBUG_PIXEL(out_ptr, output, x, y )    SetDebugPixel( (out_ptr), (output), (x), (y) )
-#define DEBUG_TARGET_PIXEL(out_ptr, output, t )    SetDebugPixel( (out_ptr), (output), (t) )
+#define DEBUG_PIXEL(out_ptr, out_stride, x, y )    SetDebugPixel( (out_ptr), (out_stride), (x), (y) )
+#define DEBUG_TARGET_PIXEL(out_ptr, t )            SetDebugPixel( (out_ptr), (t) )
 #else
-#define DEBUG_PIXEL(out_ptr, output, x, y )		((void)0)
-#define DEBUG_TARGET_PIXEL(out_ptr, output, t ) ((void)0)
+#define DEBUG_PIXEL(out_ptr, out_stride, x, y )    ((void)0)
+#define DEBUG_TARGET_PIXEL(out_ptr, t )            ((void)0)
 #endif
 
 
 
 template<typename PixelType>
-void BlendLine(     BlendingInfo<PixelType>    *pinfo,                 // 
+void BlendLine(     BlendingInfo<PixelType>    *pinfo,                 //
                     double          length,                 // このパターンの長さ
                     long            blend_target,           // ブレンド元のターゲット(input)
                     long            out_target,             // ブレンド先のターゲット(output)
@@ -383,4 +302,3 @@ void BlendLine(     BlendingInfo<PixelType>    *pinfo,                 //
 
 
 #endif
-
