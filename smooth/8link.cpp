@@ -742,8 +742,10 @@ void Link8SquareExecute( BlendingInfo<PixelType> *info )
     {
         PixelType   temp_pixel[4];
         int         ref_tbl[4];
-        int         sum_color[4];
-    
+        // 累積型はピクセル型に合わせる (整数: unsigned int、float: float)
+        // int にすると float ピクセルで 0..1 の値が切り捨てられ黒ピクセルになる
+        typename PixelRangeType<PixelType>::type sum_color[4];
+
         // 初期化
         ref_tbl[0] = -in_width -1;
         ref_tbl[1] = -in_width +1;
