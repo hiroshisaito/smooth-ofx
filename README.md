@@ -1,5 +1,7 @@
 # smooth-ofx
 
+[日本語 README](README_ja.md)
+
 OpenFX port of **smooth** — a pixel-boundary smoothing filter that cleans up
 step / staircase patterns, originally released as an After Effects plugin by
 LOILO Inc.
