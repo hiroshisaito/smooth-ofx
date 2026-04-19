@@ -84,6 +84,41 @@ static inline void getNullPixel(PixelType *p)
     p->a = 0;
 }
 
+// プリマルチプライド RGBA → ストレート RGBA に展開 (in-place)
+template <typename PixelType>
+static inline void unpremultBuffer(PixelType *buf, int count)
+{
+    const unsigned int m = getMaxValue<PixelType>();
+    for (int i = 0; i < count; i++) {
+        unsigned int a = buf[i].a;
+        if (a == 0 || a == m) continue;
+        unsigned int r = ((unsigned int)buf[i].r * m + a / 2) / a;
+        unsigned int g = ((unsigned int)buf[i].g * m + a / 2) / a;
+        unsigned int b = ((unsigned int)buf[i].b * m + a / 2) / a;
+        if (r > m) r = m;
+        if (g > m) g = m;
+        if (b > m) b = m;
+        buf[i].r = (decltype(buf[i].r))r;
+        buf[i].g = (decltype(buf[i].g))g;
+        buf[i].b = (decltype(buf[i].b))b;
+    }
+}
+
+// ストレート RGBA → プリマルチプライド RGBA に畳み込み (in-place)
+template <typename PixelType>
+static inline void premultBuffer(PixelType *buf, int count)
+{
+    const unsigned int m = getMaxValue<PixelType>();
+    for (int i = 0; i < count; i++) {
+        unsigned int a = buf[i].a;
+        if (a == m) continue;
+        if (a == 0) { buf[i].r = 0; buf[i].g = 0; buf[i].b = 0; continue; }
+        buf[i].r = (decltype(buf[i].r))(((unsigned int)buf[i].r * a + m / 2) / m);
+        buf[i].g = (decltype(buf[i].g))(((unsigned int)buf[i].g * a + m / 2) / m);
+        buf[i].b = (decltype(buf[i].b))(((unsigned int)buf[i].b * a + m / 2) / m);
+    }
+}
+
 //---------------------------------------------------------------------------//
 // preProcess: 白抜き + 処理領域（extent）の検出
 //   in_ptr はタイトに詰められた width*height のバッファを想定
@@ -569,12 +604,15 @@ render(OfxImageEffectHandle instance,
         int   srcRowBytes = 0;
         OfxRectI srcBounds;
         void *srcPtr = nullptr;
-        char *srcDepth = nullptr, *srcComponents = nullptr;
+        char *srcDepth = nullptr, *srcComponents = nullptr, *srcPremult = nullptr;
         gPropHost->propGetInt    (sourceImg, kOfxImagePropRowBytes, 0, &srcRowBytes);
         gPropHost->propGetIntN   (sourceImg, kOfxImagePropBounds, 4, &srcBounds.x1);
         gPropHost->propGetPointer(sourceImg, kOfxImagePropData, 0, &srcPtr);
         gPropHost->propGetString (sourceImg, kOfxImageEffectPropPixelDepth, 0, &srcDepth);
         gPropHost->propGetString (sourceImg, kOfxImageEffectPropComponents, 0, &srcComponents);
+        gPropHost->propGetString (sourceImg, kOfxImageEffectPropPreMultiplication, 0, &srcPremult);
+        const bool isPremult =
+            (srcPremult && std::strcmp(srcPremult, kOfxImagePreMultiplied) == 0);
 
         // RGBA / 同一ビット深度を要求
         if (!srcComponents || !dstComponents ||
@@ -629,6 +667,13 @@ render(OfxImageEffectHandle instance,
             }
         }
 
+        // プリマルチプライド → ストレートに変換 (アルゴリズムは unpremultiplied 前提)
+        const int pixelCount = width * height;
+        if (isPremult) {
+            if (is16bit) unpremultBuffer<OfxRGBAColourS>((OfxRGBAColourS *)srcBuf, pixelCount);
+            else         unpremultBuffer<OfxRGBAColourB>((OfxRGBAColourB *)srcBuf, pixelCount);
+        }
+
         // アルゴリズム実行 (srcBuf は preProcess で改変される)
         if (is16bit) {
             smoothing<OfxRGBAColourS>((OfxRGBAColourS *)srcBuf,
@@ -640,6 +685,12 @@ render(OfxImageEffectHandle instance,
                                       (OfxRGBAColourB *)dstBuf,
                                       width, height,
                                       whiteOption != 0, range, lineWeight);
+        }
+
+        // 出力をホストの期待形式 (プリマルチプライド) に戻す
+        if (isPremult) {
+            if (is16bit) premultBuffer<OfxRGBAColourS>((OfxRGBAColourS *)dstBuf, pixelCount);
+            else         premultBuffer<OfxRGBAColourB>((OfxRGBAColourB *)dstBuf, pixelCount);
         }
 
         // dstBuf → output image (renderWindow と dstBounds の交差範囲のみ)

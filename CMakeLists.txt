@@ -27,6 +27,12 @@ target_include_directories(smooth PRIVATE
     smooth/
 )
 
+# MSVC: ソースを UTF-8 として解釈 (ソースファイルに BOM が無いため、
+# 既定の ACP (日本語環境では Shift-JIS) だと先頭バイト 0x5C 問題で誤解析される)
+if(MSVC)
+    target_compile_options(smooth PRIVATE /utf-8)
+endif()
+
 # --- プラットフォーム別設定 ---
 
 if(WIN32)
@@ -73,4 +79,7 @@ if(BUILD_TESTS AND WIN32)
     add_executable(host_smoke tests/host_smoke.cpp)
     target_include_directories(host_smoke PRIVATE ${OFX_INCLUDE_DIR})
     set_target_properties(host_smoke PROPERTIES CXX_STANDARD 17)
+    if(MSVC)
+        target_compile_options(host_smoke PRIVATE /utf-8)
+    endif()
 endif()
