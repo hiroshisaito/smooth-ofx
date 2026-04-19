@@ -910,6 +910,12 @@ template void Link8Mode04Execute<OfxRGBAColourS>(BlendingInfo<OfxRGBAColourS> *p
 template void Link8SquareExecute<OfxRGBAColourB>( BlendingInfo<OfxRGBAColourB> *info );
 template void Link8SquareExecute<OfxRGBAColourS>( BlendingInfo<OfxRGBAColourS> *info );
 
+template void Link8Mode01Execute<OfxRGBAColourF>(BlendingInfo<OfxRGBAColourF> *pInfo);
+template void Link8Mode02Execute<OfxRGBAColourF>(BlendingInfo<OfxRGBAColourF> *pInfo);
+template void Link8Mode03Execute<OfxRGBAColourF>(BlendingInfo<OfxRGBAColourF> *pInfo);
+template void Link8Mode04Execute<OfxRGBAColourF>(BlendingInfo<OfxRGBAColourF> *pInfo);
+template void Link8SquareExecute<OfxRGBAColourF>( BlendingInfo<OfxRGBAColourF> *info );
+
 
 
 

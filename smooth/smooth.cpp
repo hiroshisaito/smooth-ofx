@@ -104,6 +104,18 @@ static inline void unpremultBuffer(PixelType *buf, int count)
     }
 }
 
+template <>
+inline void unpremultBuffer<OfxRGBAColourF>(OfxRGBAColourF *buf, int count)
+{
+    for (int i = 0; i < count; i++) {
+        float a = buf[i].a;
+        if (a <= 0.0f || a >= 1.0f) continue;
+        buf[i].r = buf[i].r / a;
+        buf[i].g = buf[i].g / a;
+        buf[i].b = buf[i].b / a;
+    }
+}
+
 // ストレート RGBA → プリマルチプライド RGBA に畳み込み (in-place)
 template <typename PixelType>
 static inline void premultBuffer(PixelType *buf, int count)
@@ -116,6 +128,19 @@ static inline void premultBuffer(PixelType *buf, int count)
         buf[i].r = (decltype(buf[i].r))(((unsigned int)buf[i].r * a + m / 2) / m);
         buf[i].g = (decltype(buf[i].g))(((unsigned int)buf[i].g * a + m / 2) / m);
         buf[i].b = (decltype(buf[i].b))(((unsigned int)buf[i].b * a + m / 2) / m);
+    }
+}
+
+template <>
+inline void premultBuffer<OfxRGBAColourF>(OfxRGBAColourF *buf, int count)
+{
+    for (int i = 0; i < count; i++) {
+        float a = buf[i].a;
+        if (a >= 1.0f) continue;
+        if (a <= 0.0f) { buf[i].r = 0.0f; buf[i].g = 0.0f; buf[i].b = 0.0f; continue; }
+        buf[i].r = buf[i].r * a;
+        buf[i].g = buf[i].g * a;
+        buf[i].b = buf[i].b * a;
     }
 }
 
@@ -195,8 +220,11 @@ static void smoothing(PixelType *in_ptr,
     // 入力を出力にコピー
     std::memcpy(out_ptr, in_ptr, sizeof(PixelType) * (size_t)width * (size_t)height);
 
-    unsigned int range = (unsigned int)(range_param *
-                         (getMaxValue<PixelType>() * 4)) / 100;
+    // range の型はピクセル種別で変える (整数: unsigned int、float: float)
+    // スケール: range_param (0..100) を 4 channel 分の色距離スケールへ変換
+    typename PixelRangeType<PixelType>::type range =
+        (typename PixelRangeType<PixelType>::type)(range_param *
+        (getMaxValue<PixelType>() * 4) / 100.0);
     float line_weight  = (float)(line_weight_param / 2.0 + 0.5);
     float weight;
     bool  lack_flg;
@@ -458,6 +486,7 @@ describe(OfxImageEffectHandle effect)
 
     gPropHost->propSetString(effectProps, kOfxImageEffectPropSupportedPixelDepths, 0, kOfxBitDepthByte);
     gPropHost->propSetString(effectProps, kOfxImageEffectPropSupportedPixelDepths, 1, kOfxBitDepthShort);
+    gPropHost->propSetString(effectProps, kOfxImageEffectPropSupportedPixelDepths, 2, kOfxBitDepthFloat);
 
     gPropHost->propSetInt(effectProps, kOfxImageEffectPropSupportsMultipleClipDepths, 0, 0);
     gPropHost->propSetInt(effectProps, kOfxImageEffectPropSupportsTiles, 0, 0);
@@ -624,9 +653,11 @@ render(OfxImageEffectHandle instance,
             throw NoImageEx();
         }
 
-        const bool is16bit = (std::strcmp(srcDepth, kOfxBitDepthShort) == 0);
-        const int  bpp     = is16bit ? (int)sizeof(OfxRGBAColourS)
-                                     : (int)sizeof(OfxRGBAColourB);
+        const bool is16bit  = (std::strcmp(srcDepth, kOfxBitDepthShort) == 0);
+        const bool isFloat  = (std::strcmp(srcDepth, kOfxBitDepthFloat) == 0);
+        const int  bpp      = isFloat ? (int)sizeof(OfxRGBAColourF)
+                            : is16bit ? (int)sizeof(OfxRGBAColourS)
+                                      : (int)sizeof(OfxRGBAColourB);
 
         // 処理サイズは output のバウンズに合わせる (no-tiles なので RoD 全体)
         const int width  = dstBounds.x2 - dstBounds.x1;
@@ -670,12 +701,18 @@ render(OfxImageEffectHandle instance,
         // プリマルチプライド → ストレートに変換 (アルゴリズムは unpremultiplied 前提)
         const int pixelCount = width * height;
         if (isPremult) {
-            if (is16bit) unpremultBuffer<OfxRGBAColourS>((OfxRGBAColourS *)srcBuf, pixelCount);
-            else         unpremultBuffer<OfxRGBAColourB>((OfxRGBAColourB *)srcBuf, pixelCount);
+            if (isFloat)      unpremultBuffer<OfxRGBAColourF>((OfxRGBAColourF *)srcBuf, pixelCount);
+            else if (is16bit) unpremultBuffer<OfxRGBAColourS>((OfxRGBAColourS *)srcBuf, pixelCount);
+            else              unpremultBuffer<OfxRGBAColourB>((OfxRGBAColourB *)srcBuf, pixelCount);
         }
 
         // アルゴリズム実行 (srcBuf は preProcess で改変される)
-        if (is16bit) {
+        if (isFloat) {
+            smoothing<OfxRGBAColourF>((OfxRGBAColourF *)srcBuf,
+                                      (OfxRGBAColourF *)dstBuf,
+                                      width, height,
+                                      whiteOption != 0, range, lineWeight);
+        } else if (is16bit) {
             smoothing<OfxRGBAColourS>((OfxRGBAColourS *)srcBuf,
                                       (OfxRGBAColourS *)dstBuf,
                                       width, height,
@@ -689,8 +726,9 @@ render(OfxImageEffectHandle instance,
 
         // 出力をホストの期待形式 (プリマルチプライド) に戻す
         if (isPremult) {
-            if (is16bit) premultBuffer<OfxRGBAColourS>((OfxRGBAColourS *)dstBuf, pixelCount);
-            else         premultBuffer<OfxRGBAColourB>((OfxRGBAColourB *)dstBuf, pixelCount);
+            if (isFloat)      premultBuffer<OfxRGBAColourF>((OfxRGBAColourF *)dstBuf, pixelCount);
+            else if (is16bit) premultBuffer<OfxRGBAColourS>((OfxRGBAColourS *)dstBuf, pixelCount);
+            else              premultBuffer<OfxRGBAColourB>((OfxRGBAColourB *)dstBuf, pixelCount);
         }
 
         // dstBuf → output image (renderWindow と dstBounds の交差範囲のみ)

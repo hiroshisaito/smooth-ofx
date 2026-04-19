@@ -7,12 +7,20 @@
 #ifndef __DEFINE_H
 #define __DEFINE_H
 
+#include "ofxPixels.h"
+
 // 型 //
 typedef unsigned char   u_char;
 typedef unsigned int    u_int;
 typedef unsigned short  u_short;
 typedef unsigned long   u_long;
 
+
+// BlendingInfo::range の型ディスパッチ:
+//   整数ピクセル (B/S): unsigned int (8/16bpc の検証済み挙動を完全に保持)
+//   float ピクセル (F): float (range_param を 0..1 スケールで扱う必要があるため)
+template<typename PixelType> struct PixelRangeType { using type = unsigned int; };
+template<> struct PixelRangeType<OfxRGBAColourF> { using type = float; };
 
 
 // OFXはRGBA (r, g, b, a の順)
@@ -45,7 +53,7 @@ struct BlendingInfo
                 out_target;         //                                    (output に対する)
     Cinfo       core[4];            // 処理すべき長さ、フラグなどのコアの情報 0:left 1:right 2:top 3:bottom
     int         flag;               // 制御用のフラグ(補正用のカウントなど)
-    unsigned int range;             // 同じ色とみなす範囲
+    typename PixelRangeType<PixelType>::type range;   // 同じ色とみなす範囲 (整数 or float)
     int         mode;               // 処理するモード
     float       LineWeight;         // ラインの太さ
 

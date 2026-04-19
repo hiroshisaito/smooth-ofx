@@ -788,3 +788,12 @@ template void upMode_TopBlending<OfxRGBAColourS>(BlendingInfo<OfxRGBAColourS> *i
 template void upMode_BottomBlending<OfxRGBAColourB>( BlendingInfo<OfxRGBAColourB> *info);
 template void upMode_BottomBlending<OfxRGBAColourS>(BlendingInfo<OfxRGBAColourS> *info);
 
+template void upMode_LeftCountLength<OfxRGBAColourF>(BlendingInfo<OfxRGBAColourF> *info);
+template void upMode_RightCountLength<OfxRGBAColourF>(BlendingInfo<OfxRGBAColourF> *info);
+template void upMode_TopCountLength<OfxRGBAColourF>(BlendingInfo<OfxRGBAColourF> *info);
+template void upMode_BottomCountLength<OfxRGBAColourF>(BlendingInfo<OfxRGBAColourF> *info);
+template void upMode_LeftBlending<OfxRGBAColourF>(BlendingInfo<OfxRGBAColourF> *info);
+template void upMode_RightBlending<OfxRGBAColourF>(BlendingInfo<OfxRGBAColourF> *info);
+template void upMode_TopBlending<OfxRGBAColourF>(BlendingInfo<OfxRGBAColourF> *info);
+template void upMode_BottomBlending<OfxRGBAColourF>(BlendingInfo<OfxRGBAColourF> *info);
+

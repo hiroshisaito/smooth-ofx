@@ -283,3 +283,13 @@ template void BlendLine<OfxRGBAColourS>(BlendingInfo<OfxRGBAColourS>    *pinfo,
 								    int             next_pixel_step_out,
 								    bool            ratio_invert,
 								    bool            no_line_weight);
+
+template void BlendLine<OfxRGBAColourF>(BlendingInfo<OfxRGBAColourF>    *pinfo,
+								    double          length,
+								    long            blend_target,
+								    long            out_target,
+								    int             ref_offset,
+								    int             next_pixel_step_in,
+								    int             next_pixel_step_out,
+								    bool            ratio_invert,
+								    bool            no_line_weight);

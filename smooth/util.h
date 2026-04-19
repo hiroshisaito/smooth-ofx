@@ -88,6 +88,7 @@ void EndProfileLap(int index);
 template<typename PixelType> static inline unsigned int getMaxValue() { return ~0; }
 template <> inline unsigned int getMaxValue<OfxRGBAColourB>() { return 0xFF; }
 template <> inline unsigned int getMaxValue<OfxRGBAColourS>() { return 0xFFFF; }
+template <> inline unsigned int getMaxValue<OfxRGBAColourF>() { return 1; }
 
 
 
@@ -131,9 +132,9 @@ template <> inline unsigned int getMaxValue<OfxRGBAColourS>() { return 0xFFFF; }
 // Pixel比較関数
 //---------------------------------------------------------------------------//
 template <typename PixelType>
-static inline bool RangeComparePixelNotEqual( const PixelType *p0, const PixelType *p1, const unsigned int range )
+static inline bool RangeComparePixelNotEqual( const PixelType *p0, const PixelType *p1, const typename PixelRangeType<PixelType>::type range )
 {
-    unsigned int delta;
+    typename PixelRangeType<PixelType>::type delta;
     delta = ABS(p0->r - p1->r) +
             ABS(p0->g - p1->g) +
             ABS(p0->b - p1->b) +
@@ -144,9 +145,9 @@ static inline bool RangeComparePixelNotEqual( const PixelType *p0, const PixelTy
 
 
 template <typename PixelType>
-static inline bool RangeComparePixelEqual( const PixelType *p0, const PixelType *p1, const unsigned int range )
+static inline bool RangeComparePixelEqual( const PixelType *p0, const PixelType *p1, const typename PixelRangeType<PixelType>::type range )
 {
-    unsigned int delta;
+    typename PixelRangeType<PixelType>::type delta;
     delta = ABS(p0->r - p1->r) +
             ABS(p0->g - p1->g) +
             ABS(p0->b - p1->b) +
@@ -242,6 +243,46 @@ static inline void BlendingPixelf(  PixelType *target_pixel,
 }
 
 
+
+
+// float ピクセル用の特殊化: 整数トリック (max_value 除算) を使わず直接 float 乗算
+template <>
+inline void BlendingPixelf<OfxRGBAColourF>( OfxRGBAColourF *target_pixel,
+                                            OfxRGBAColourF *ref_pixel,
+                                            OfxRGBAColourF *output_pixel,
+                                            float   ratio )
+{
+    const float r_ratio = 1.0f - ratio;
+
+    if (target_pixel->a >= 1.0f && ref_pixel->a >= 1.0f)
+    {
+        output_pixel->a = 1.0f;
+        output_pixel->r = target_pixel->r * ratio + ref_pixel->r * r_ratio;
+        output_pixel->g = target_pixel->g * ratio + ref_pixel->g * r_ratio;
+        output_pixel->b = target_pixel->b * ratio + ref_pixel->b * r_ratio;
+    }
+    else if (target_pixel->a <= 0.0f)
+    {
+        output_pixel->a = target_pixel->a * ratio + ref_pixel->a * r_ratio;
+        output_pixel->r = ref_pixel->r;
+        output_pixel->g = ref_pixel->g;
+        output_pixel->b = ref_pixel->b;
+    }
+    else if (ref_pixel->a <= 0.0f)
+    {
+        output_pixel->a = target_pixel->a * ratio + ref_pixel->a * r_ratio;
+        output_pixel->r = target_pixel->r;
+        output_pixel->g = target_pixel->g;
+        output_pixel->b = target_pixel->b;
+    }
+    else
+    {
+        output_pixel->a = target_pixel->a * ratio + ref_pixel->a * r_ratio;
+        output_pixel->r = target_pixel->r * ratio + ref_pixel->r * r_ratio;
+        output_pixel->g = target_pixel->g * ratio + ref_pixel->g * r_ratio;
+        output_pixel->b = target_pixel->b * ratio + ref_pixel->b * r_ratio;
+    }
+}
 
 
 // float版のブレンディング命令 //

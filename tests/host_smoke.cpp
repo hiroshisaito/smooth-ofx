@@ -366,6 +366,26 @@ static bool write_ppm(const char *path, const P *buf, int w, int h, unsigned int
     return true;
 }
 
+// float 版: 0..1 を 8bpc に量子化して P6 で書き出す (PPM は float 非対応)
+template <>
+bool write_ppm<OfxRGBAColourF>(const char *path, const OfxRGBAColourF *buf, int w, int h, unsigned int)
+{
+    FILE *f = std::fopen(path, "wb");
+    if (!f) return false;
+    std::fprintf(f, "P6\n%d %d\n255\n", w, h);
+    for (int i = 0; i < w * h; ++i) {
+        auto q = [](float v) {
+            if (v <= 0.0f) return (unsigned char)0;
+            if (v >= 1.0f) return (unsigned char)255;
+            return (unsigned char)(v * 255.0f + 0.5f);
+        };
+        unsigned char rgb[3] = { q(buf[i].r), q(buf[i].g), q(buf[i].b) };
+        std::fwrite(rgb, 1, 3, f);
+    }
+    std::fclose(f);
+    return true;
+}
+
 // ---------------------------------------------------------------------------
 // 画像プロパティ (clipGetImage の戻り) を仕込む
 // ---------------------------------------------------------------------------
@@ -539,6 +559,41 @@ int main(int argc, char **argv)
 
         write_ppm<OfxRGBAColourS>("build-mingw/smoke_src_16bpc.ppm", srcImg.data(), W, H, 0xFFFF);
         write_ppm<OfxRGBAColourS>("build-mingw/smoke_dst_16bpc.ppm", dstImg.data(), W, H, 0xFFFF);
+    }
+
+    // ---- float パス ----
+    {
+        std::vector<OfxRGBAColourF> srcImg(W * H), dstImg(W * H);
+        make_test_image<OfxRGBAColourF>(srcImg.data(), W, H, 1);
+        std::memset(dstImg.data(), 0, sizeof(OfxRGBAColourF) * W * H);
+
+        srcClip->imageProps = std::make_unique<PropertySet>();
+        dstClip->imageProps = std::make_unique<PropertySet>();
+        setup_image_props(*srcClip->imageProps, srcImg.data(), W, H,
+                          kOfxBitDepthFloat, kOfxImageComponentRGBA, W * (int)sizeof(OfxRGBAColourF));
+        setup_image_props(*dstClip->imageProps, dstImg.data(), W, H,
+                          kOfxBitDepthFloat, kOfxImageComponentRGBA, W * (int)sizeof(OfxRGBAColourF));
+
+        PropertySet renderArgs;
+        prop_set_double(PROP_SET_HANDLE(&renderArgs), kOfxPropTime, 0, 0.0);
+        int rw[4] = { 0, 0, W, H };
+        prop_set_intN(PROP_SET_HANDLE(&renderArgs), kOfxImageEffectPropRenderWindow, 4, rw);
+
+        st = plugin->mainEntry(kOfxImageEffectActionRender, &eff,
+                               PROP_SET_HANDLE(&renderArgs), nullptr);
+        std::printf("[host-smoke] [float] kOfxImageEffectActionRender -> %d\n", st);
+
+        int pure0 = 0, pureMax = 0, intermed = 0;
+        for (auto &p : dstImg) {
+            if (p.r == 0.0f && p.g == 0.0f && p.b == 0.0f) ++pure0;
+            else if (p.r == 1.0f && p.g == 1.0f && p.b == 1.0f) ++pureMax;
+            else if (p.r == p.g && p.g == p.b) ++intermed;
+        }
+        std::printf("[host-smoke] [float] pure0=%d pureMax=%d intermediate=%d / %d\n",
+                    pure0, pureMax, intermed, W * H);
+
+        write_ppm<OfxRGBAColourF>("build-mingw/smoke_src_float.ppm", srcImg.data(), W, H, 1);
+        write_ppm<OfxRGBAColourF>("build-mingw/smoke_dst_float.ppm", dstImg.data(), W, H, 1);
     }
 
     // destroyInstance

@@ -276,3 +276,7 @@ template void LackMode02Execute<OfxRGBAColourS>( BlendingInfo<OfxRGBAColourS> *i
 template void LackMode0304Execute<OfxRGBAColourB>( BlendingInfo<OfxRGBAColourB> *info );
 template void LackMode0304Execute<OfxRGBAColourS>( BlendingInfo<OfxRGBAColourS> *info );
 
+template void LackMode01Execute<OfxRGBAColourF>( BlendingInfo<OfxRGBAColourF> *info );
+template void LackMode02Execute<OfxRGBAColourF>( BlendingInfo<OfxRGBAColourF> *info );
+template void LackMode0304Execute<OfxRGBAColourF>( BlendingInfo<OfxRGBAColourF> *info );
+
