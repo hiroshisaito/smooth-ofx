@@ -326,31 +326,41 @@ static OfxHost gHost = {
 // ---------------------------------------------------------------------------
 // 画像バッファ作成ヘルパ (8bit RGBA、ストライプのテスト画像)
 // ---------------------------------------------------------------------------
-static void make_test_image(OfxRGBAColourB *buf, int w, int h)
+template <typename P>
+static void make_test_image(P *buf, int w, int h, unsigned int maxv)
 {
-    // 斜め階段パターン: y%2==0 の行は左半分が白、右半分が黒。
-    // smooth プラグインはピクセル境界の階段を検出してアンチエイリアス化する。
+    // 斜め階段パターン: smooth プラグインが境界の階段をアンチエイリアス化する。
     for (int y = 0; y < h; ++y) {
         for (int x = 0; x < w; ++x) {
             int step = x + y;
-            OfxRGBAColourB p;
-            if ((step / 4) % 2 == 0) { p.r = p.g = p.b = 0;   p.a = 255; }
-            else                      { p.r = p.g = p.b = 255; p.a = 255; }
+            P p;
+            if ((step / 4) % 2 == 0) { p.r = p.g = p.b = 0;                           p.a = (decltype(p.a))maxv; }
+            else                      { p.r = p.g = p.b = (decltype(p.r))maxv;        p.a = (decltype(p.a))maxv; }
             buf[y * w + x] = p;
         }
     }
 }
 
-// PPM (P6) 出力
-static bool write_ppm(const char *path, const OfxRGBAColourB *buf, int w, int h)
+// PPM (P6) 出力。16bpc は maxval=65535 の P6 として書き出し (ネットワークバイト順)
+template <typename P>
+static bool write_ppm(const char *path, const P *buf, int w, int h, unsigned int maxv)
 {
     FILE *f = std::fopen(path, "wb");
     if (!f) return false;
-    std::fprintf(f, "P6\n%d %d\n255\n", w, h);
+    std::fprintf(f, "P6\n%d %d\n%u\n", w, h, maxv);
     for (int i = 0; i < w * h; ++i) {
-        std::fwrite(&buf[i].r, 1, 1, f);
-        std::fwrite(&buf[i].g, 1, 1, f);
-        std::fwrite(&buf[i].b, 1, 1, f);
+        if (maxv <= 255) {
+            unsigned char rgb[3] = { (unsigned char)buf[i].r, (unsigned char)buf[i].g, (unsigned char)buf[i].b };
+            std::fwrite(rgb, 1, 3, f);
+        } else {
+            // P6 16bit はビッグエンディアン
+            unsigned short rgb[3] = {
+                (unsigned short)(((buf[i].r & 0xFF) << 8) | ((buf[i].r >> 8) & 0xFF)),
+                (unsigned short)(((buf[i].g & 0xFF) << 8) | ((buf[i].g >> 8) & 0xFF)),
+                (unsigned short)(((buf[i].b & 0xFF) << 8) | ((buf[i].b >> 8) & 0xFF)),
+            };
+            std::fwrite(rgb, 2, 3, f);
+        }
     }
     std::fclose(f);
     return true;
@@ -360,13 +370,14 @@ static bool write_ppm(const char *path, const OfxRGBAColourB *buf, int w, int h)
 // 画像プロパティ (clipGetImage の戻り) を仕込む
 // ---------------------------------------------------------------------------
 static void setup_image_props(PropertySet &ps, void *data, int w, int h,
-                              const char *pixelDepth, const char *components)
+                              const char *pixelDepth, const char *components,
+                              int rowBytes)
 {
     prop_set_pointer(PROP_SET_HANDLE(&ps), kOfxImagePropData, 0, data);
     int bounds[4] = { 0, 0, w, h };
     prop_set_intN(PROP_SET_HANDLE(&ps), kOfxImagePropBounds, 4, bounds);
     prop_set_intN(PROP_SET_HANDLE(&ps), kOfxImagePropRegionOfDefinition, 4, bounds);
-    prop_set_int(PROP_SET_HANDLE(&ps), kOfxImagePropRowBytes, 0, w * 4);
+    prop_set_int(PROP_SET_HANDLE(&ps), kOfxImagePropRowBytes, 0, rowBytes);
     prop_set_string(PROP_SET_HANDLE(&ps), kOfxImageEffectPropPixelDepth, 0, pixelDepth);
     prop_set_string(PROP_SET_HANDLE(&ps), kOfxImageEffectPropComponents, 0, components);
 }
@@ -454,37 +465,81 @@ int main(int argc, char **argv)
     std::printf("[host-smoke] kOfxActionCreateInstance -> %d\n", st);
     if (st != kOfxStatOK && st != kOfxStatReplyDefault) { std::printf("FAIL createInstance\n"); return 8; }
 
-    // 合成画像を用意して render を呼ぶ
+    // 合成画像を用意して render を呼ぶ (8bpc と 16bpc を両方駆動)
     const int W = 64, H = 32;
-    std::vector<OfxRGBAColourB> srcImg(W * H), dstImg(W * H);
-    make_test_image(srcImg.data(), W, H);
-    std::memset(dstImg.data(), 0, sizeof(OfxRGBAColourB) * W * H);
-
     auto &srcClip = eff.clips[kOfxImageEffectSimpleSourceClipName];
     auto &dstClip = eff.clips[kOfxImageEffectOutputClipName];
     if (!srcClip || !dstClip) { std::printf("FAIL: clips not defined\n"); return 9; }
-    srcClip->imageProps = std::make_unique<PropertySet>();
-    dstClip->imageProps = std::make_unique<PropertySet>();
-    setup_image_props(*srcClip->imageProps, srcImg.data(), W, H, kOfxBitDepthByte, kOfxImageComponentRGBA);
-    setup_image_props(*dstClip->imageProps, dstImg.data(), W, H, kOfxBitDepthByte, kOfxImageComponentRGBA);
 
-    PropertySet renderArgs;
-    prop_set_double(PROP_SET_HANDLE(&renderArgs), kOfxPropTime, 0, 0.0);
-    int rw[4] = { 0, 0, W, H };
-    prop_set_intN(PROP_SET_HANDLE(&renderArgs), kOfxImageEffectPropRenderWindow, 4, rw);
+    // ---- 8bpc パス ----
+    {
+        std::vector<OfxRGBAColourB> srcImg(W * H), dstImg(W * H);
+        make_test_image<OfxRGBAColourB>(srcImg.data(), W, H, 0xFF);
+        std::memset(dstImg.data(), 0, sizeof(OfxRGBAColourB) * W * H);
 
-    st = plugin->mainEntry(kOfxImageEffectActionRender, &eff,
-                           PROP_SET_HANDLE(&renderArgs), nullptr);
-    std::printf("[host-smoke] kOfxImageEffectActionRender -> %d\n", st);
+        srcClip->imageProps = std::make_unique<PropertySet>();
+        dstClip->imageProps = std::make_unique<PropertySet>();
+        setup_image_props(*srcClip->imageProps, srcImg.data(), W, H,
+                          kOfxBitDepthByte, kOfxImageComponentRGBA, W * (int)sizeof(OfxRGBAColourB));
+        setup_image_props(*dstClip->imageProps, dstImg.data(), W, H,
+                          kOfxBitDepthByte, kOfxImageComponentRGBA, W * (int)sizeof(OfxRGBAColourB));
 
-    // 最低限の確認: 出力が全 0 ではない
-    int nonZero = 0;
-    for (auto &p : dstImg) if (p.r || p.g || p.b) { nonZero++; }
-    std::printf("[host-smoke] dst non-zero pixels: %d / %d\n", nonZero, W * H);
+        PropertySet renderArgs;
+        prop_set_double(PROP_SET_HANDLE(&renderArgs), kOfxPropTime, 0, 0.0);
+        int rw[4] = { 0, 0, W, H };
+        prop_set_intN(PROP_SET_HANDLE(&renderArgs), kOfxImageEffectPropRenderWindow, 4, rw);
 
-    write_ppm("build-mingw/smoke_src.ppm", srcImg.data(), W, H);
-    write_ppm("build-mingw/smoke_dst.ppm", dstImg.data(), W, H);
-    std::printf("[host-smoke] wrote build-mingw/smoke_src.ppm and build-mingw/smoke_dst.ppm\n");
+        st = plugin->mainEntry(kOfxImageEffectActionRender, &eff,
+                               PROP_SET_HANDLE(&renderArgs), nullptr);
+        std::printf("[host-smoke] [ 8bpc] kOfxImageEffectActionRender -> %d\n", st);
+
+        int pure0 = 0, pureMax = 0, intermed = 0;
+        for (auto &p : dstImg) {
+            if (p.r == 0 && p.g == 0 && p.b == 0) ++pure0;
+            else if (p.r == 0xFF && p.g == 0xFF && p.b == 0xFF) ++pureMax;
+            else if (p.r == p.g && p.g == p.b) ++intermed;
+        }
+        std::printf("[host-smoke] [ 8bpc] pure0=%d pureMax=%d intermediate=%d / %d\n",
+                    pure0, pureMax, intermed, W * H);
+
+        write_ppm<OfxRGBAColourB>("build-mingw/smoke_src_8bpc.ppm", srcImg.data(), W, H, 0xFF);
+        write_ppm<OfxRGBAColourB>("build-mingw/smoke_dst_8bpc.ppm", dstImg.data(), W, H, 0xFF);
+    }
+
+    // ---- 16bpc パス ----
+    {
+        std::vector<OfxRGBAColourS> srcImg(W * H), dstImg(W * H);
+        make_test_image<OfxRGBAColourS>(srcImg.data(), W, H, 0xFFFF);
+        std::memset(dstImg.data(), 0, sizeof(OfxRGBAColourS) * W * H);
+
+        srcClip->imageProps = std::make_unique<PropertySet>();
+        dstClip->imageProps = std::make_unique<PropertySet>();
+        setup_image_props(*srcClip->imageProps, srcImg.data(), W, H,
+                          kOfxBitDepthShort, kOfxImageComponentRGBA, W * (int)sizeof(OfxRGBAColourS));
+        setup_image_props(*dstClip->imageProps, dstImg.data(), W, H,
+                          kOfxBitDepthShort, kOfxImageComponentRGBA, W * (int)sizeof(OfxRGBAColourS));
+
+        PropertySet renderArgs;
+        prop_set_double(PROP_SET_HANDLE(&renderArgs), kOfxPropTime, 0, 0.0);
+        int rw[4] = { 0, 0, W, H };
+        prop_set_intN(PROP_SET_HANDLE(&renderArgs), kOfxImageEffectPropRenderWindow, 4, rw);
+
+        st = plugin->mainEntry(kOfxImageEffectActionRender, &eff,
+                               PROP_SET_HANDLE(&renderArgs), nullptr);
+        std::printf("[host-smoke] [16bpc] kOfxImageEffectActionRender -> %d\n", st);
+
+        int pure0 = 0, pureMax = 0, intermed = 0;
+        for (auto &p : dstImg) {
+            if (p.r == 0 && p.g == 0 && p.b == 0) ++pure0;
+            else if (p.r == 0xFFFF && p.g == 0xFFFF && p.b == 0xFFFF) ++pureMax;
+            else if (p.r == p.g && p.g == p.b) ++intermed;
+        }
+        std::printf("[host-smoke] [16bpc] pure0=%d pureMax=%d intermediate=%d / %d\n",
+                    pure0, pureMax, intermed, W * H);
+
+        write_ppm<OfxRGBAColourS>("build-mingw/smoke_src_16bpc.ppm", srcImg.data(), W, H, 0xFFFF);
+        write_ppm<OfxRGBAColourS>("build-mingw/smoke_dst_16bpc.ppm", dstImg.data(), W, H, 0xFFFF);
+    }
 
     // destroyInstance
     st = plugin->mainEntry(kOfxActionDestroyInstance, &eff, nullptr, nullptr);
