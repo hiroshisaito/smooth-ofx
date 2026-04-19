@@ -3,12 +3,20 @@
 
 # ビルド成果物
 /build/
+/build-macos/
 /build-mingw/
 /build-msvc/
 /out/
 /install/
 *.ofx
 *.ofx.bundle/
+
+# ディストリビューション成果物 (staged bundle / zip は追跡しない)
+/dist/macos-release/
+/dist/*.zip
+
+# Claude Code
+/.claude/
 
 # CMake
 CMakeCache.txt
