@@ -1,0 +1,77 @@
+smooth OFX plugin — Release Notes
+=================================
+
+Version      : 1.4.0
+Release date : 2026-04-20
+Platform     : macOS Universal 2 (arm64 + x86_64), Windows x64
+Signed       : NO (test distribution build)
+
+Initial OpenFX port of the "smooth" plugin, originally released by LOILO Inc.
+as an After Effects plugin. Verified on DaVinci Resolve on both Windows and
+macOS.
+
+
+Install (macOS)
+---------------
+
+See the bundled README.txt for step-by-step instructions.
+
+Summary:
+  1. Unzip, copy smooth.ofx.bundle to /Library/OFX/Plugins/
+  2. sudo xattr -dr com.apple.quarantine /Library/OFX/Plugins/smooth.ofx.bundle
+  3. Restart DaVinci Resolve -> Effects -> Filters -> Smooth
+
+
+What's new in 1.4.0
+-------------------
+
+Added
+  * OpenFX 1.5.1 plugin implementation (jp.loilo.smooth, version 1.4).
+  * Pixel-depth support: 8-bit integer, 16-bit integer, 16-bit float,
+    and 32-bit float RGBA working color spaces.
+  * Premultiplied-alpha handling: input is unpremultiplied before the
+    smoothing pass and re-premultiplied on output, so Resolve / Fusion
+    produce correct edges.
+  * Parameters: range (0..100, default 1.0), lineWeight (0..1, default 0.0),
+    whiteOption / transparent (boolean).
+  * macOS Universal 2 build (arm64 + x86_64), deployment target 11.0,
+    proper smooth.ofx.bundle with generated Info.plist.
+  * Windows x64 build via MSVC 2019+ or MSYS2 MinGW-w64.
+  * Minimal OFX host harness (tests/host_smoke.cpp) for smoke testing
+    without a full host.
+
+Fixed
+  * Black-pixel artifact on lines in 16/32-bit float color spaces.
+    Root cause: int accumulator truncating float pixel values.
+  * White-fringe artifact on transparent edges under DaVinci Resolve
+    when the transparent option was on. Root cause: algorithm assumed
+    straight RGBA; now unpremult/premult are handled.
+
+
+Known limitations
+-----------------
+
+  * Tile rendering is not supported.
+  * Multi-resolution / proxy rendering is not verified.
+  * GPU render path is not implemented (CPU only).
+  * The macOS release ZIP is not code-signed or notarized. Remove the
+    quarantine attribute before loading:
+      sudo xattr -dr com.apple.quarantine \
+        /Library/OFX/Plugins/smooth.ofx.bundle
+
+
+Checksums
+---------
+
+See dist/smooth-1.4.0-macos-universal.zip.sha256 for the SHA-256 of the
+release archive.
+
+
+License and acknowledgments
+---------------------------
+
+Apache License 2.0 — inherited from the upstream loilo-inc/smooth project.
+Original plugin by Kouji Sugiyama (2004), open-sourced by LOILO Inc. at
+https://github.com/loilo-inc/smooth.
+
+See LICENSE and README.md in the source repository for full text.

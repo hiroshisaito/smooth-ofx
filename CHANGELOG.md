@@ -1,5 +1,7 @@
 # Changelog
 
+[日本語版 CHANGELOG](CHANGELOG_ja.md)
+
 All notable changes to this project will be documented in this file.
 
 The project follows [Semantic Versioning](https://semver.org/). The initial
