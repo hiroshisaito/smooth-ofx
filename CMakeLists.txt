@@ -47,12 +47,23 @@ if(WIN32)
         CACHE PATH "OFX plugin install directory")
 
 elseif(APPLE)
-    # macOS: .ofx.bundle (将来対応)
+    # macOS: smooth.ofx.bundle/Contents/MacOS/smooth.ofx
+    # Info.plist は dist/Info.plist.in から CMake が生成する
+    # OUTPUT_NAME="smooth.ofx" + BUNDLE_EXTENSION="bundle" で
+    #   bundle フォルダ = "smooth.ofx.bundle"
+    #   内部実行ファイル = "smooth.ofx"
     set_target_properties(smooth PROPERTIES
-        OUTPUT_NAME "smooth"
-        SUFFIX      ".ofx"
-        PREFIX      ""
-        BUNDLE      TRUE
+        OUTPUT_NAME                         "smooth.ofx"
+        SUFFIX                              ""
+        PREFIX                              ""
+        BUNDLE                              TRUE
+        BUNDLE_EXTENSION                    "bundle"
+        MACOSX_BUNDLE_INFO_PLIST            "${CMAKE_SOURCE_DIR}/dist/Info.plist.in"
+        MACOSX_BUNDLE_EXECUTABLE_NAME       "smooth.ofx"
+        MACOSX_BUNDLE_BUNDLE_NAME           "smooth"
+        MACOSX_BUNDLE_BUNDLE_VERSION        "${PROJECT_VERSION}"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING  "${PROJECT_VERSION}"
+        MACOSX_BUNDLE_GUI_IDENTIFIER        "jp.loilo.smooth"
     )
     set(OFX_INSTALL_DIR "/Library/OFX/Plugins"
         CACHE PATH "OFX plugin install directory")
@@ -68,10 +79,22 @@ else()
         CACHE PATH "OFX plugin install directory")
 endif()
 
-# インストールターゲット
-install(TARGETS smooth
-    LIBRARY DESTINATION "${OFX_INSTALL_DIR}/smooth.ofx.bundle/Contents/Win64"
-)
+# インストールターゲット (プラットフォーム別)
+if(APPLE)
+    # Bundle 丸ごと OFX_INSTALL_DIR 直下に配置
+    install(TARGETS smooth
+        BUNDLE  DESTINATION "${OFX_INSTALL_DIR}"
+        LIBRARY DESTINATION "${OFX_INSTALL_DIR}"
+    )
+elseif(WIN32)
+    install(TARGETS smooth
+        LIBRARY DESTINATION "${OFX_INSTALL_DIR}/smooth.ofx.bundle/Contents/Win64"
+    )
+else()
+    install(TARGETS smooth
+        LIBRARY DESTINATION "${OFX_INSTALL_DIR}/smooth.ofx.bundle/Contents/Linux-x86-64"
+    )
+endif()
 
 # --- スモークテスト用のミニホスト (Windows のみ) ---
 option(BUILD_TESTS "Build host smoke test" ON)
