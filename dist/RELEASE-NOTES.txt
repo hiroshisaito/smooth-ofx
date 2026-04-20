@@ -3,18 +3,33 @@ smooth OFX plugin — Release Notes
 
 Version      : 1.4.0
 Release date : 2026-04-20
-Platform     : macOS Universal 2 (arm64 + x86_64), Windows x64
-Signed       : NO (test distribution build)
+Platforms    : macOS arm64 (Apple Silicon), macOS x86_64 (Intel), Windows x64
+Signed       : Ad hoc on macOS, NOT notarized (test distribution build)
 
 Initial OpenFX port of the "smooth" plugin, originally released by LOILO Inc.
 as an After Effects plugin. Verified on DaVinci Resolve on both Windows and
 macOS.
 
 
+Release artifacts (macOS)
+-------------------------
+
+Per-architecture builds are shipped separately; pick the one that matches
+the Mac you install on:
+
+  * smooth-1.4.0-macos-arm64.zip    — Apple Silicon (M1 / M2 / M3 / M4 …)
+  * smooth-1.4.0-macos-x86_64.zip   — Intel Macs
+
+Each archive contains smooth.ofx.bundle (single-arch), README.txt, and
+RELEASE-NOTES.txt.
+
+SHA-256 digests are provided alongside each zip as .zip.sha256 files.
+
+
 Install (macOS)
 ---------------
 
-See the bundled README.txt for step-by-step instructions.
+See the README.txt bundled inside the archive for step-by-step instructions.
 
 Summary:
   1. Unzip, copy smooth.ofx.bundle to /Library/OFX/Plugins/
@@ -34,7 +49,7 @@ Added
     produce correct edges.
   * Parameters: range (0..100, default 1.0), lineWeight (0..1, default 0.0),
     whiteOption / transparent (boolean).
-  * macOS Universal 2 build (arm64 + x86_64), deployment target 11.0,
+  * macOS arm64 and x86_64 per-architecture builds, deployment target 11.0,
     proper smooth.ofx.bundle with generated Info.plist.
   * Windows x64 build via MSVC 2019+ or MSYS2 MinGW-w64.
   * Minimal OFX host harness (tests/host_smoke.cpp) for smoke testing
@@ -54,8 +69,9 @@ Known limitations
   * Tile rendering is not supported.
   * Multi-resolution / proxy rendering is not verified.
   * GPU render path is not implemented (CPU only).
-  * The macOS release ZIP is not code-signed or notarized. Remove the
-    quarantine attribute before loading:
+  * macOS release zips are ad hoc signed but NOT notarized. Gatekeeper
+    may still block first load. Remove the quarantine attribute before
+    loading:
       sudo xattr -dr com.apple.quarantine \
         /Library/OFX/Plugins/smooth.ofx.bundle
 
@@ -63,8 +79,8 @@ Known limitations
 Checksums
 ---------
 
-See dist/smooth-1.4.0-macos-universal.zip.sha256 for the SHA-256 of the
-release archive.
+  * dist/smooth-1.4.0-macos-arm64.zip.sha256
+  * dist/smooth-1.4.0-macos-x86_64.zip.sha256
 
 
 License and acknowledgments

@@ -18,7 +18,8 @@ Fusion など OFX 対応ホストで利用できるようにしました。
 
 ## 対応プラットフォーム
 
-- **macOS 11 以降** — Universal 2 (`arm64` + `x86_64`)
+- **macOS 11 以降** — `arm64` (Apple Silicon) と `x86_64` (Intel) の
+  アーキテクチャ別シングルアーキビルドを個別に配布
 - **Windows 10 以降 (x64)** — MSVC 2019+ もしくは MSYS2 MinGW-w64
 
 ## リポジトリ構成
@@ -48,19 +49,37 @@ git submodule update --init include/openfx
 
 ## ビルド
 
-### macOS (Universal)
+### macOS — アーキテクチャ別ビルド
+
+リリース配布物はアーキテクチャ別のシングルアーキ zip として用意して
+います。`CMAKE_OSX_ARCHITECTURES` を切り替えて、それぞれビルド
+してください。
 
 ```bash
-cmake -S . -B build-macos \
+# Apple Silicon
+cmake -S . -B build-macos-arm64 \
   -DCMAKE_BUILD_TYPE=Release \
-  -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" \
+  -DCMAKE_OSX_ARCHITECTURES="arm64" \
   -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 \
   -DBUILD_TESTS=OFF
-cmake --build build-macos --config Release
+cmake --build build-macos-arm64 --config Release
+
+# Intel
+cmake -S . -B build-macos-x86_64 \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_OSX_ARCHITECTURES="x86_64" \
+  -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 \
+  -DBUILD_TESTS=OFF
+cmake --build build-macos-x86_64 --config Release
 ```
 
-成果物は
-`build-macos/smooth.ofx.bundle/Contents/MacOS/smooth.ofx` に出力されます。
+各ビルドの成果物は
+`build-macos-<arch>/smooth.ofx.bundle/Contents/MacOS/smooth.ofx` に
+出力されます。
+
+単一の fat binary (Universal 2) が必要な場合は
+`-DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"` を指定すれば従来通り
+ビルドできます。
 
 ### Windows
 

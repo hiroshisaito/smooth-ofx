@@ -29,9 +29,12 @@ DaVinci Resolve 上での動作を確認しています。
   - `range` (double, 0–100, default 1.0)
   - `lineWeight` (double, 0–1, default 0.0)
   - `whiteOption` / transparent (boolean)
-- macOS Universal 2 ビルド (`arm64` + `x86_64`)、デプロイメント
-  ターゲット 11.0。`Info.plist` を自動生成する正式な
-  `smooth.ofx.bundle` を出力。
+- macOS の `arm64` (Apple Silicon) / `x86_64` (Intel) ビルド、
+  デプロイメントターゲット 11.0。リリース配布物はアーキテクチャ
+  別のシングルアーキ zip (`smooth-1.4.0-macos-arm64.zip` /
+  `smooth-1.4.0-macos-x86_64.zip`) として提供し、それぞれ
+  `Info.plist` を自動生成した正式な `smooth.ofx.bundle` を出力、
+  アドホック署名 (ad hoc codesign) 済み。
 - Windows x64 ビルド: MSVC 2019+ または MSYS2 MinGW-w64 に対応。
 - `tests/host_smoke.cpp` に最小 OFX ホストハーネスを用意
   (Windows のみ) — フルホストなしでプラグインのスモーク
@@ -58,9 +61,12 @@ DaVinci Resolve 上での動作を確認しています。
 - タイル描画には非対応 (`kOfxImageEffectPropSupportsTiles = 0`)。
 - マルチレゾリューション / プロキシ描画は未検証。
 - GPU レンダリングパス (`ofxGPURender.h`) は未実装 — CPU のみ。
-- macOS リリース zip (`smooth-1.4.0-macos-universal.zip`) は
-  **未署名・未公証**です。受け取り側で
-  `xattr -dr com.apple.quarantine` による検疫属性の除去が必要です。
+- macOS リリース zip (`smooth-1.4.0-macos-arm64.zip` /
+  `smooth-1.4.0-macos-x86_64.zip`) は **アドホック署名のみ**、
+  Developer ID による**公証 (notarization) は未実施**です。
+  Gatekeeper が初回ロード時にブロックする可能性があるため、
+  受け取り側で `xattr -dr com.apple.quarantine` による検疫属性の
+  除去が必要です。
 
 ### 謝辞 (Acknowledgments)
 

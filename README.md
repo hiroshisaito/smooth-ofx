@@ -20,7 +20,8 @@ Fusion and other OFX-compliant hosts.
 
 ## Supported platforms
 
-- **macOS 11+** — Universal 2 (`arm64` + `x86_64`)
+- **macOS 11+** — `arm64` (Apple Silicon) and `x86_64` (Intel) are shipped
+  as separate single-architecture builds
 - **Windows 10+ (x64)** — MSVC 2019+ or MSYS2 MinGW-w64
 
 ## Repository layout
@@ -50,19 +51,35 @@ git submodule update --init include/openfx
 
 ## Building
 
-### macOS (Universal)
+### macOS — per-architecture builds
+
+Release artifacts are shipped as separate single-architecture zips. Build
+each target by passing the matching `CMAKE_OSX_ARCHITECTURES` value.
 
 ```bash
-cmake -S . -B build-macos \
+# Apple Silicon
+cmake -S . -B build-macos-arm64 \
   -DCMAKE_BUILD_TYPE=Release \
-  -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" \
+  -DCMAKE_OSX_ARCHITECTURES="arm64" \
   -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 \
   -DBUILD_TESTS=OFF
-cmake --build build-macos --config Release
+cmake --build build-macos-arm64 --config Release
+
+# Intel
+cmake -S . -B build-macos-x86_64 \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_OSX_ARCHITECTURES="x86_64" \
+  -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 \
+  -DBUILD_TESTS=OFF
+cmake --build build-macos-x86_64 --config Release
 ```
 
-The bundle is emitted at
-`build-macos/smooth.ofx.bundle/Contents/MacOS/smooth.ofx`.
+Each bundle is emitted at
+`build-macos-<arch>/smooth.ofx.bundle/Contents/MacOS/smooth.ofx`.
+
+A universal 2 bundle (`arm64;x86_64`) can still be produced with
+`-DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"` if a single fat binary is
+preferred.
 
 ### Windows
 

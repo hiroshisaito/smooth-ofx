@@ -29,8 +29,11 @@ on both Windows and macOS.
   - `range` (double, 0–100, default 1.0)
   - `lineWeight` (double, 0–1, default 0.0)
   - `whiteOption` / transparent (boolean)
-- macOS Universal 2 build (`arm64` + `x86_64`), deployment target 11.0.
-  Emits a proper `smooth.ofx.bundle` with generated `Info.plist`.
+- macOS builds for `arm64` (Apple Silicon) and `x86_64` (Intel),
+  deployment target 11.0. Release artifacts are shipped as separate
+  single-architecture zips (`smooth-1.4.0-macos-arm64.zip` and
+  `smooth-1.4.0-macos-x86_64.zip`); each emits a proper
+  `smooth.ofx.bundle` with generated `Info.plist` and is ad hoc signed.
 - Windows x64 build via MSVC 2019+ or MSYS2 MinGW-w64.
 - Minimal OFX host harness under `tests/host_smoke.cpp` (Windows only)
   for smoke-testing the plugin without a full host.
@@ -55,9 +58,11 @@ on both Windows and macOS.
 - Tile rendering is not supported (`kOfxImageEffectPropSupportsTiles = 0`).
 - Multi-resolution / proxy rendering is not verified.
 - GPU render path (`ofxGPURender.h`) is not implemented — CPU only.
-- The macOS release ZIP (`smooth-1.4.0-macos-universal.zip`) is not
-  code-signed or notarized; recipients must remove the quarantine
-  attribute with `xattr -dr com.apple.quarantine` before loading.
+- The macOS release zips (`smooth-1.4.0-macos-arm64.zip` and
+  `smooth-1.4.0-macos-x86_64.zip`) are **ad hoc signed** but **not
+  notarized** with a Developer ID. Gatekeeper may still block first
+  load; recipients must remove the quarantine attribute with
+  `xattr -dr com.apple.quarantine` before loading.
 
 ### Acknowledgments
 

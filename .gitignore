@@ -3,7 +3,7 @@
 
 # ビルド成果物
 /build/
-/build-macos/
+/build-macos*/
 /build-mingw/
 /build-msvc/
 /out/
@@ -12,7 +12,7 @@
 *.ofx.bundle/
 
 # ディストリビューション成果物 (staged bundle / zip / sha256 は追跡しない)
-/dist/macos-release/
+/dist/macos-release*/
 /dist/*.zip
 /dist/*.sha256
 
