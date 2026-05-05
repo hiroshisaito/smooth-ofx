@@ -1,10 +1,16 @@
 smooth OFX plugin — Release Notes
 =================================
 
-Version      : 1.4.0
-Release date : 2026-04-20
+Version      : 1.4.0 (Rust core refresh, 2026-05-05)
+Release date : 2026-05-05 (macOS Rust-core build; original 2026-04-20)
 Platforms    : macOS arm64 (Apple Silicon), macOS x86_64 (Intel), Windows x64
 Signed       : Ad hoc on macOS, NOT notarized (test distribution build)
+
+This refresh routes the 8-bit and 32-bit float paths through the
+smooth_core Rust crate (shared with hiroshisaito/smooth v1.6.0). Output
+is byte-identical to 1.4.0; algorithm is now rayon-parallel and
+2.5x-3.1x faster on multi-core hosts at 1080p/4K. 16-bit integer path
+keeps the C++ implementation for now.
 
 Initial OpenFX port of the "smooth" plugin, originally released by LOILO Inc.
 as an After Effects plugin. Verified on DaVinci Resolve on both Windows and

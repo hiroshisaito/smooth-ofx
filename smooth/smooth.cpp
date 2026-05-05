@@ -6,10 +6,18 @@
 // Step 4: render() — 8bpc + 16bpc, tight-buffer copy + smoothing algorithm
 //
 
+#include <cstdio>
 #include <cstring>
 #include <cstdlib>
 #include <stdexcept>
 #include <new>
+
+#ifndef SMOOTH_OFX_VERSION
+#  define SMOOTH_OFX_VERSION "1.4.0"
+#endif
+#ifndef SMOOTH_OFX_GIT_SHA
+#  define SMOOTH_OFX_GIT_SHA "unknown"
+#endif
 
 #include "ofxImageEffect.h"
 #include "ofxMemory.h"
@@ -45,6 +53,7 @@ static OfxMultiThreadSuiteV1  *gThreadHost  = nullptr;
 #define kParamWhiteOption   "whiteOption"
 #define kParamRange         "range"
 #define kParamLineWeight    "lineWeight"
+#define kParamBuildInfo     "buildInfo"
 
 //---------------------------------------------------------------------------//
 // インスタンスごとに保持するデータ
@@ -55,6 +64,7 @@ struct MyInstanceData {
     OfxParamHandle      whiteOptionParam;
     OfxParamHandle      rangeParam;
     OfxParamHandle      lineWeightParam;
+    OfxParamHandle      buildInfoParam;
 };
 
 static MyInstanceData *
@@ -549,6 +559,19 @@ describeInContext(OfxImageEffectHandle effect, OfxPropertySetHandle /*inArgs*/)
     gPropHost->propSetString(props, kOfxParamPropHint, 0, "Smoothing line weight (0=thin, 1=thick)");
     gPropHost->propSetString(props, kOfxParamPropScriptName, 0, kParamLineWeight);
 
+    // ビルド ID 表示用 read-only ラベル。値は createInstance で設定する。
+    // UAT 中に「どのビルド (rust core / cpp core / SHA / dirty) が走っているか」を
+    // ホストの Inspector で一目で確認するためのもの。レンダ結果には影響しない。
+    gParamHost->paramDefine(paramSet, kOfxParamTypeString, kParamBuildInfo, &props);
+    gPropHost->propSetString(props, kOfxParamPropStringMode, 0, kOfxParamStringIsLabel);
+    gPropHost->propSetString(props, kOfxParamPropDefault, 0, "");
+    gPropHost->propSetString(props, kOfxPropLabel, 0, "build");
+    gPropHost->propSetString(props, kOfxParamPropHint, 0, "Plugin build identity (read-only). Set per instance, not saved in projects.");
+    gPropHost->propSetString(props, kOfxParamPropScriptName, 0, kParamBuildInfo);
+    gPropHost->propSetInt(props, kOfxParamPropPersistant, 0, 0);
+    gPropHost->propSetInt(props, kOfxParamPropEvaluateOnChange, 0, 0);
+    gPropHost->propSetInt(props, kOfxParamPropAnimates, 0, 0);
+
     return kOfxStatOK;
 }
 
@@ -572,6 +595,26 @@ createInstance(OfxImageEffectHandle effect)
     gParamHost->paramGetHandle(paramSet, kParamWhiteOption, &myData->whiteOptionParam, 0);
     gParamHost->paramGetHandle(paramSet, kParamRange,       &myData->rangeParam,       0);
     gParamHost->paramGetHandle(paramSet, kParamLineWeight,  &myData->lineWeightParam,  0);
+    gParamHost->paramGetHandle(paramSet, kParamBuildInfo,   &myData->buildInfoParam,   0);
+
+    // ビルド ID をラベル param に書き込む (Inspector 表示用)。
+    // 例: "1.4.0+a566908+dirty / rust core 0.1.0+a566908"
+    //     "1.4.0+a566908       / cpp core"
+    {
+        char buildIdStr[256];
+#ifdef SMOOTH_OFX_USE_RUST_CORE
+        const char *coreId = smooth_core_build_id();
+        std::snprintf(buildIdStr, sizeof(buildIdStr),
+                      "%s+%s / rust core %s",
+                      SMOOTH_OFX_VERSION, SMOOTH_OFX_GIT_SHA,
+                      (coreId && *coreId) ? coreId : "?");
+#else
+        std::snprintf(buildIdStr, sizeof(buildIdStr),
+                      "%s+%s / cpp core",
+                      SMOOTH_OFX_VERSION, SMOOTH_OFX_GIT_SHA);
+#endif
+        gParamHost->paramSetValue(myData->buildInfoParam, buildIdStr);
+    }
 
     gPropHost->propSetPointer(effectProps, kOfxPropInstanceData, 0, (void *)myData);
 

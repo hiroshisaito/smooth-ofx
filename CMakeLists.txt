@@ -4,6 +4,30 @@ project(smooth-ofx VERSION 1.4.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# --- ビルド ID 採取 (UI 上で UAT 中のビルドを判別するため) ---
+# git short SHA + (working tree が dirty なら "+dirty") を構成時に取得し、
+# プリプロセッサ定義 SMOOTH_OFX_GIT_SHA として smooth.cpp に渡す。
+execute_process(
+    COMMAND git rev-parse --short HEAD
+    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    OUTPUT_VARIABLE  SMOOTH_OFX_GIT_SHA
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET
+)
+if(NOT SMOOTH_OFX_GIT_SHA)
+    set(SMOOTH_OFX_GIT_SHA "unknown")
+endif()
+execute_process(
+    COMMAND git diff --quiet HEAD
+    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    RESULT_VARIABLE  _SMOOTH_OFX_DIRTY
+    ERROR_QUIET
+)
+if(_SMOOTH_OFX_DIRTY EQUAL 1)
+    set(SMOOTH_OFX_GIT_SHA "${SMOOTH_OFX_GIT_SHA}+dirty")
+endif()
+message(STATUS "smooth-ofx build id: ${PROJECT_VERSION}+${SMOOTH_OFX_GIT_SHA}")
+
 # OFX SDK (submodule: include/openfx)
 set(OFX_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/include/openfx/include")
 if(NOT EXISTS "${OFX_INCLUDE_DIR}/ofxImageEffect.h")
@@ -25,6 +49,11 @@ add_library(smooth MODULE
 target_include_directories(smooth PRIVATE
     ${OFX_INCLUDE_DIR}
     smooth/
+)
+
+target_compile_definitions(smooth PRIVATE
+    SMOOTH_OFX_VERSION="${PROJECT_VERSION}"
+    SMOOTH_OFX_GIT_SHA="${SMOOTH_OFX_GIT_SHA}"
 )
 
 # MSVC: ソースを UTF-8 として解釈 (ソースファイルに BOM が無いため、

@@ -1,13 +1,24 @@
 smooth OFX plugin (macOS arm64 / Apple Silicon) — install guide
 ===============================================================
 
-Version: 1.4.0
+Version: 1.4.0 (Rust core build)
 Architecture: arm64 (Apple Silicon only — M1 / M2 / M3 / M4 …)
 Deployment target: macOS 11.0+
 Signed/Notarized: Ad hoc signed, NOT notarized (internal/test distribution)
 
 This archive contains ONLY the arm64 build. Intel (x86_64) Macs must use
 smooth-1.4.0-macos-x86_64.zip instead.
+
+What changed in this build
+--------------------------
+
+The 8-bit and 32-bit float code paths now run through the smooth_core
+Rust crate (shared with the After Effects fork hiroshisaito/smooth
+v1.6.0). Output is byte-identical to the previous C++ build, but the
+algorithm is parallelised across CPU cores via rayon. Internal benchmarks
+on 1080p / 4K test images show 2.5x-3.1x wall-clock speedup on 8 physical
+cores. The 16-bit integer path is unchanged (still C++); we'll bring it
+through Rust once smooth_core gains an OFX-flavour 16bpc max value.
 
 
 Install

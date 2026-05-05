@@ -302,6 +302,26 @@ static OfxStatus param_get_value_at_time(OfxParamHandle h, OfxTime t, ...)
     return kOfxStatOK;
 }
 
+// paramSetValue: 文字列だけ最低限実装 (buildInfo ラベル更新確認用)。
+// 数値/ブール系は smooth プラグインが render 時に書き込まないため未対応で OK。
+static OfxStatus param_set_value(OfxParamHandle h, ...)
+{
+    auto *p = reinterpret_cast<ParamHandle *>(h);
+    std::string type;
+    { char *ts = nullptr; prop_get_string(PROP_SET_HANDLE(p->props.get()), kOfxParamPropType, 0, &ts); if (ts) type = ts; }
+
+    va_list ap; va_start(ap, h);
+    if (type == kOfxParamTypeString) {
+        const char *v = va_arg(ap, const char *);
+        if (v) {
+            // 値を kOfxParamPropDefault 経由で再現 (param_get_value がそれを返すため)
+            prop_set_string(PROP_SET_HANDLE(p->props.get()), kOfxParamPropDefault, 0, v);
+        }
+    }
+    va_end(ap);
+    return kOfxStatOK;
+}
+
 static OfxStatus param_stub(...) { return kOfxStatErrUnsupported; }
 
 static OfxParameterSuiteV1 gParamSuite = {
@@ -313,7 +333,7 @@ static OfxParameterSuiteV1 gParamSuite = {
     param_get_value_at_time,
     reinterpret_cast<OfxStatus (*)(OfxParamHandle, OfxTime, ...)>(param_stub),                 // paramGetDerivative
     reinterpret_cast<OfxStatus (*)(OfxParamHandle, OfxTime, OfxTime, ...)>(param_stub),        // paramGetIntegral
-    reinterpret_cast<OfxStatus (*)(OfxParamHandle, ...)>(param_stub),                          // paramSetValue
+    param_set_value,                                                                            // paramSetValue
     reinterpret_cast<OfxStatus (*)(OfxParamHandle, OfxTime, ...)>(param_stub),                 // paramSetValueAtTime
     reinterpret_cast<OfxStatus (*)(OfxParamHandle, unsigned int *)>(param_stub),               // paramGetNumKeys
     reinterpret_cast<OfxStatus (*)(OfxParamHandle, unsigned int, OfxTime *)>(param_stub),      // paramGetKeyTime
@@ -504,6 +524,18 @@ int main(int argc, char **argv)
     st = plugin->mainEntry(kOfxActionCreateInstance, &eff, nullptr, nullptr);
     std::printf("[host-smoke] kOfxActionCreateInstance -> %d\n", st);
     if (st != kOfxStatOK && st != kOfxStatReplyDefault) { std::printf("FAIL createInstance\n"); return 8; }
+
+    // buildInfo (read-only label) を読み出して表示。createInstance 内で paramSetValue
+    // されているので、それが反映されていれば runtime build identity が確認できる。
+    {
+        auto it = eff.params.find("buildInfo");
+        if (it != eff.params.end()) {
+            char *bi = nullptr;
+            prop_get_string(PROP_SET_HANDLE(it->second->props.get()),
+                            kOfxParamPropDefault, 0, &bi);
+            std::printf("[host-smoke] buildInfo = \"%s\"\n", bi ? bi : "(null)");
+        }
+    }
 
     // 合成画像を用意して render を呼ぶ (8bpc と 16bpc を両方駆動)
     const int W = 64, H = 32;
