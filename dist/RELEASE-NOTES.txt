@@ -1,16 +1,25 @@
 smooth OFX plugin — Release Notes
 =================================
 
-Version      : 1.4.0 (Rust core refresh, 2026-05-05)
-Release date : 2026-05-05 (macOS Rust-core build; original 2026-04-20)
+Version      : 1.6.0
+Release date : 2026-05-05
 Platforms    : macOS arm64 (Apple Silicon), macOS x86_64 (Intel), Windows x64
 Signed       : Ad hoc on macOS, NOT notarized (test distribution build)
 
-This refresh routes the 8-bit and 32-bit float paths through the
-smooth_core Rust crate (shared with hiroshisaito/smooth v1.6.0). Output
-is byte-identical to 1.4.0; algorithm is now rayon-parallel and
-2.5x-3.1x faster on multi-core hosts at 1080p/4K. 16-bit integer path
-keeps the C++ implementation for now.
+This release aligns the OFX-port version line with the AE-side fork
+hiroshisaito/smooth v1.6.0. There were no OFX 1.5.x releases (the
+1.5.x line was AE-side only); 1.6.0 picks up where OFX 1.4.0 left off.
+
+Highlights vs 1.4.0:
+  * 8-bit and 32-bit float paths now run through the smooth_core Rust
+    crate (rayon strip-parallel internally). Output is byte-identical
+    to 1.4.0; wall-clock is 2.5x-3.1x faster on multi-core hosts at
+    1080p/4K.
+  * 16-bit integer keeps the C++ implementation for now (smooth_core's
+    Pixel16 max is 0x8000, OFX's is 0xFFFF).
+  * Effect Controls now show a read-only "build" label with the plugin
+    version + git short SHA + Rust core build id, so UAT can confirm
+    at a glance which build is loaded.
 
 Initial OpenFX port of the "smooth" plugin, originally released by LOILO Inc.
 as an After Effects plugin. Verified on DaVinci Resolve on both Windows and
@@ -23,8 +32,8 @@ Release artifacts (macOS)
 Per-architecture builds are shipped separately; pick the one that matches
 the Mac you install on:
 
-  * smooth-1.4.0-macos-arm64.zip    — Apple Silicon (M1 / M2 / M3 / M4 …)
-  * smooth-1.4.0-macos-x86_64.zip   — Intel Macs
+  * smooth-1.6.0-macos-arm64.zip    — Apple Silicon (M1 / M2 / M3 / M4 …)
+  * smooth-1.6.0-macos-x86_64.zip   — Intel Macs
 
 Each archive contains smooth.ofx.bundle (single-arch), README.txt, and
 RELEASE-NOTES.txt.
@@ -43,8 +52,8 @@ Summary:
   3. Restart DaVinci Resolve -> Effects -> Filters -> Smooth
 
 
-What's new in 1.4.0
--------------------
+What was in 1.4.0 (carried into 1.6.0)
+--------------------------------------
 
 Added
   * OpenFX 1.5.1 plugin implementation (jp.loilo.smooth, version 1.4).
@@ -85,8 +94,8 @@ Known limitations
 Checksums
 ---------
 
-  * dist/smooth-1.4.0-macos-arm64.zip.sha256
-  * dist/smooth-1.4.0-macos-x86_64.zip.sha256
+  * dist/smooth-1.6.0-macos-arm64.zip.sha256
+  * dist/smooth-1.6.0-macos-x86_64.zip.sha256
 
 
 License and acknowledgments

@@ -1,13 +1,13 @@
 smooth OFX plugin (macOS arm64 / Apple Silicon) — install guide
 ===============================================================
 
-Version: 1.4.0 (Rust core build)
+Version: 1.6.0 (aligned with the AE-side hiroshisaito/smooth v1.6.0)
 Architecture: arm64 (Apple Silicon only — M1 / M2 / M3 / M4 …)
 Deployment target: macOS 11.0+
 Signed/Notarized: Ad hoc signed, NOT notarized (internal/test distribution)
 
 This archive contains ONLY the arm64 build. Intel (x86_64) Macs must use
-smooth-1.4.0-macos-x86_64.zip instead.
+smooth-1.6.0-macos-x86_64.zip instead.
 
 What changed in this build
 --------------------------
@@ -24,7 +24,7 @@ through Rust once smooth_core gains an OFX-flavour 16bpc max value.
 Install
 -------
 
-1. Unzip smooth-1.4.0-macos-arm64.zip. You should get a directory named
+1. Unzip smooth-1.6.0-macos-arm64.zip. You should get a directory named
    "smooth.ofx.bundle".
 
 2. Copy it to the OFX plugins directory:

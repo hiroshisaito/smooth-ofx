@@ -4,10 +4,56 @@
 
 All notable changes to this project will be documented in this file.
 
-The project follows [Semantic Versioning](https://semver.org/). The initial
-OFX port inherits the version number (`1.4.0`) of the upstream After Effects
-plugin ([loilo-inc/smooth](https://github.com/loilo-inc/smooth)); OFX-port-
-specific fixes will advance the patch component.
+The project follows [Semantic Versioning](https://semver.org/) and tracks
+the upstream AE-side fork
+[hiroshisaito/smooth](https://github.com/hiroshisaito/smooth) for major /
+minor numbers — the OFX port does not maintain an independent version line.
+The 1.5.x series was AE-side only and was skipped by the OFX port; 1.6.0
+realigns both sides.
+
+## 1.6.0 — 2026-05-05
+
+Aligns the OFX port with the AE-side fork
+[hiroshisaito/smooth](https://github.com/hiroshisaito/smooth) v1.6.0.
+Output is byte-identical to 1.4.0 for all three pixel depths; the change
+is internal (Rust-core algorithm) plus build-info UI.
+
+### Added
+
+- `smooth_core` Rust crate (vendored from `smooth-ae/rust/smooth_core`,
+  v0.1.0) is now used for the 8-bit and 32-bit float code paths.
+  rayon strip-parallel internally; output verified byte-identical to
+  the 1.4.0 C++ implementation via host_smoke + PPM cmp.
+- New CMake option `USE_RUST_CORE` (default OFF) enables the Rust-core
+  build. Distributed macOS zips are built with `USE_RUST_CORE=ON`.
+- Read-only `build` parameter in Effect Controls showing the plugin
+  version, OFX-port git SHA (with `+dirty` flag), and the Rust core
+  build identity. Lets UAT confirm at a glance which build is loaded.
+- Cross-platform `host_smoke` (was Windows-only); now runs on macOS /
+  Linux via `dlopen`, with an optional bench mode triggered by
+  `SMOOTH_BENCH_SIZE=WxH SMOOTH_BENCH_ITERS=N`.
+
+### Performance
+
+Wall-clock measurements on an 8-core host, comparing Rust-core build
+to the C++-only 1.4.0 baseline:
+
+| Image          | 8-bit                | 32-bit float         |
+|----------------|----------------------|----------------------|
+| 1920 x 1080    | 91.7 ms -> 36.2 ms (2.53x) | 130.2 ms -> 48.5 ms (2.68x) |
+| 3840 x 2160    | 365.8 ms -> 118.8 ms (3.08x) | 507.5 ms -> 185.9 ms (2.73x) |
+
+16-bit integer is unchanged (still C++ — OFX uses 0xFFFF max where
+`smooth_core::Pixel16` uses 0x8000). Will move to Rust once the crate
+gets an OFX-flavour 16bpc max value.
+
+### Notes
+
+- Bundle size grew (~134 KB -> ~607 KB on arm64) because rayon and
+  its dependencies are statically linked into the plugin. No new
+  runtime dependencies; `otool -L` still shows only `libc++` /
+  `libSystem`.
+- Distribution zips renamed from `smooth-1.4.0-*` to `smooth-1.6.0-*`.
 
 ## 1.4.0 — 2026-04-20
 

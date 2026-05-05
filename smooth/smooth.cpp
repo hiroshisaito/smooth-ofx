@@ -1034,7 +1034,7 @@ static OfxPlugin smoothPlugin = {
     kOfxImageEffectPluginApi,
     1,
     "jp.loilo.smooth",
-    1, 4,
+    1, 6,
     setHostFunc,
     pluginMain
 };
