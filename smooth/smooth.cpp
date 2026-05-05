@@ -559,10 +559,10 @@ describeInContext(OfxImageEffectHandle effect, OfxPropertySetHandle /*inArgs*/)
     gPropHost->propSetString(props, kOfxParamPropHint, 0, "Smoothing line weight (0=thin, 1=thick)");
     gPropHost->propSetString(props, kOfxParamPropScriptName, 0, kParamLineWeight);
 
-    // ビルド ID 表示用 read-only ラベル。
-    // DaVinci Resolve は `kOfxParamStringIsLabel` の値を `kOfxParamPropDefault` から
-    // 読み (createInstance での paramSetValue は反映されない) ため、ここで build-id を
-    // 直接 default として焼き付ける。compile-time 情報なので per-instance で変わらない。
+    // ビルド ID 表示用 read-only テキストフィールド。
+    // DaVinci Resolve は `kOfxParamStringIsLabel` の値をレンダリングしないため、
+    // 「SingleLine + Enabled=0 (disabled)」という他 OFX プラグインでも一般的な
+    // パターンに切り替え、通常の text widget をグレーアウト表示で読み取り専用にする。
     {
         char buildIdStr[256];
 #ifdef SMOOTH_OFX_USE_RUST_CORE
@@ -577,11 +577,12 @@ describeInContext(OfxImageEffectHandle effect, OfxPropertySetHandle /*inArgs*/)
                       SMOOTH_OFX_VERSION, SMOOTH_OFX_GIT_SHA);
 #endif
         gParamHost->paramDefine(paramSet, kOfxParamTypeString, kParamBuildInfo, &props);
-        gPropHost->propSetString(props, kOfxParamPropStringMode, 0, kOfxParamStringIsLabel);
+        gPropHost->propSetString(props, kOfxParamPropStringMode, 0, kOfxParamStringIsSingleLine);
         gPropHost->propSetString(props, kOfxParamPropDefault, 0, buildIdStr);
         gPropHost->propSetString(props, kOfxPropLabel, 0, "build");
         gPropHost->propSetString(props, kOfxParamPropHint, 0, "Plugin build identity (read-only).");
         gPropHost->propSetString(props, kOfxParamPropScriptName, 0, kParamBuildInfo);
+        gPropHost->propSetInt(props, kOfxParamPropEnabled, 0, 0);  // disabled = read-only in UI
         gPropHost->propSetInt(props, kOfxParamPropPersistant, 0, 0);
         gPropHost->propSetInt(props, kOfxParamPropEvaluateOnChange, 0, 0);
         gPropHost->propSetInt(props, kOfxParamPropAnimates, 0, 0);
