@@ -51,44 +51,32 @@ git submodule update --init include/openfx
 
 ## Building
 
-### macOS — per-architecture builds
-
-Release artifacts are shipped as separate single-architecture zips. Build
-each target by passing the matching `CMAKE_OSX_ARCHITECTURES` value.
+See **[BUILDING.md](BUILDING.md)** for the full cross-platform build
+guide (macOS / Windows / Linux), including Rust core (`smooth_core`)
+toolchain setup, CMake options, signing, and validation. Quick path:
 
 ```bash
-# Apple Silicon
+# macOS arm64 (Apple Silicon)
 cmake -S . -B build-macos-arm64 \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_OSX_ARCHITECTURES="arm64" \
-  -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 \
-  -DBUILD_TESTS=OFF
+  -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
 cmake --build build-macos-arm64 --config Release
 
-# Intel
-cmake -S . -B build-macos-x86_64 \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DCMAKE_OSX_ARCHITECTURES="x86_64" \
-  -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 \
-  -DBUILD_TESTS=OFF
-cmake --build build-macos-x86_64 --config Release
-```
-
-Each bundle is emitted at
-`build-macos-<arch>/smooth.ofx.bundle/Contents/MacOS/smooth.ofx`.
-
-A universal 2 bundle (`arm64;x86_64`) can still be produced with
-`-DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"` if a single fat binary is
-preferred.
-
-### Windows
-
-```bash
+# Windows MSVC x64 (from a "x64 Native Tools Command Prompt for VS")
 cmake -S . -B build-msvc -G "Visual Studio 17 2022" -A x64
 cmake --build build-msvc --config Release
+
+# Linux x86_64
+cmake -S . -B build-linux -DCMAKE_BUILD_TYPE=Release
+cmake --build build-linux
 ```
 
-The DLL is emitted at `build-msvc/Release/smooth.ofx`.
+The `USE_RUST_CORE` CMake option (default ON since 1.6.0) wires the
+shared `smooth_core` Rust crate into the build for the 8-bit and
+32-bit float code paths. Pass `-DUSE_RUST_CORE=OFF` to skip it
+(useful for environments without a Rust toolchain or for the MSYS2
+MinGW dev path).
 
 ## Installation
 

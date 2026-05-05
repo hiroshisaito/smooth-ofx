@@ -49,46 +49,32 @@ git submodule update --init include/openfx
 
 ## ビルド
 
-### macOS — アーキテクチャ別ビルド
-
-リリース配布物はアーキテクチャ別のシングルアーキ zip として用意して
-います。`CMAKE_OSX_ARCHITECTURES` を切り替えて、それぞれビルド
-してください。
+クロスプラットフォーム (macOS / Windows / Linux) の詳細手順は
+**[BUILDING_ja.md](BUILDING_ja.md)** を参照してください — Rust core
+(`smooth_core`) のセットアップ、CMake オプション、署名、検証を網羅
+しています。クイックスタート:
 
 ```bash
-# Apple Silicon
+# macOS arm64 (Apple Silicon)
 cmake -S . -B build-macos-arm64 \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_OSX_ARCHITECTURES="arm64" \
-  -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 \
-  -DBUILD_TESTS=OFF
+  -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
 cmake --build build-macos-arm64 --config Release
 
-# Intel
-cmake -S . -B build-macos-x86_64 \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DCMAKE_OSX_ARCHITECTURES="x86_64" \
-  -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 \
-  -DBUILD_TESTS=OFF
-cmake --build build-macos-x86_64 --config Release
-```
-
-各ビルドの成果物は
-`build-macos-<arch>/smooth.ofx.bundle/Contents/MacOS/smooth.ofx` に
-出力されます。
-
-単一の fat binary (Universal 2) が必要な場合は
-`-DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"` を指定すれば従来通り
-ビルドできます。
-
-### Windows
-
-```bash
+# Windows MSVC x64 ("x64 Native Tools Command Prompt for VS" から)
 cmake -S . -B build-msvc -G "Visual Studio 17 2022" -A x64
 cmake --build build-msvc --config Release
+
+# Linux x86_64
+cmake -S . -B build-linux -DCMAKE_BUILD_TYPE=Release
+cmake --build build-linux
 ```
 
-DLL は `build-msvc/Release/smooth.ofx` に出力されます。
+CMake オプション `USE_RUST_CORE` (1.6.0 以降は default ON) は、共有
+`smooth_core` Rust crate を 8-bit / 32-bit float 経路に組み込みます。
+Rust toolchain が無い環境や MSYS2 MinGW 開発経路では
+`-DUSE_RUST_CORE=OFF` でスキップ可能です。
 
 ## インストール
 
