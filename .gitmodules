@@ -3,4 +3,4 @@
 	url = https://github.com/AcademySoftwareFoundation/openfx
 [submodule "smooth-ae"]
 	path = smooth-ae
-	url = https://github.com/loilo-inc/smooth
+	url = https://github.com/hiroshisaito/smooth

@@ -37,7 +37,7 @@ Fusion など OFX 対応ホストで利用できるようにしました。
 | パス | 取得元 | ビルド必須 |
 |---|---|---|
 | `include/openfx` | [AcademySoftwareFoundation/openfx](https://github.com/AcademySoftwareFoundation/openfx) @ `OFX_Release_1.5.1` | 必須 |
-| `smooth-ae` | [loilo-inc/smooth](https://github.com/loilo-inc/smooth) | 不要 (参照用) |
+| `smooth-ae` | [hiroshisaito/smooth](https://github.com/hiroshisaito/smooth) ([loilo-inc/smooth](https://github.com/loilo-inc/smooth) のメンテナンス fork) | 不要 (参照用) |
 
 クローン後:
 

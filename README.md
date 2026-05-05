@@ -39,7 +39,7 @@ Fusion and other OFX-compliant hosts.
 | Path | Source | Required for build |
 |---|---|---|
 | `include/openfx` | [AcademySoftwareFoundation/openfx](https://github.com/AcademySoftwareFoundation/openfx) @ `OFX_Release_1.5.1` | Yes |
-| `smooth-ae` | [loilo-inc/smooth](https://github.com/loilo-inc/smooth) | No — reference only |
+| `smooth-ae` | [hiroshisaito/smooth](https://github.com/hiroshisaito/smooth) (maintenance fork of [loilo-inc/smooth](https://github.com/loilo-inc/smooth)) | No — reference only |
 
 After cloning:
 
