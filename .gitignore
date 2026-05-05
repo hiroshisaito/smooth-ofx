@@ -6,10 +6,15 @@
 /build-macos*/
 /build-mingw/
 /build-msvc/
+/build-rust*/
 /out/
 /install/
 *.ofx
 *.ofx.bundle/
+
+# 旧 PPM dump 用ディレクトリ (host_smoke が build-mingw/ 直書きするため)
+# CI 等で project root から走らせる場合は無視させる
+!/build-mingw/.gitkeep
 
 # ディストリビューション成果物 (staged bundle / zip / sha256 は追跡しない)
 /dist/macos-release*/
