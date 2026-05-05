@@ -1,15 +1,33 @@
 // host_smoke.cpp
 // ----------------------------------------------------------------------------
-// 最小限の OFX ホスト。smooth.ofx を LoadLibrary で読み込み、
+// 最小限の OFX ホスト。smooth プラグインを動的に読み込み、
 // setHost → onLoad → describe → describeInContext → createInstance → render
 // → destroyInstance → onUnload を順に駆動し、戻り値と描画結果を確認する。
 //
 // 目的: DaVinci Resolve 等の実機ホストを用意する前に、プラグインが
 //       「load/describe/パラメータ定義/最低限の render」までは落ちずに
 //       走ることを MSYS2 MINGW64 のコマンドラインで検証する。
+//       Phase 2 (Rust core) では macOS 上でも本ハーネスでピクセル統計を比較し、
+//       AE 由来の Rust 移植経路と C++ 経路の同値性を確認する。
 // ----------------------------------------------------------------------------
 
-#include <windows.h>
+#if defined(_WIN32)
+#  include <windows.h>
+#  define SMOOTH_DL_HANDLE         HMODULE
+#  define SMOOTH_DL_OPEN(path)     LoadLibraryA(path)
+#  define SMOOTH_DL_SYM(h, name)   ((void *)GetProcAddress((h), (name)))
+#  define SMOOTH_DL_CLOSE(h)       FreeLibrary(h)
+#  define SMOOTH_DL_ERR_FMT        "LoadLibrary error=%lu"
+#  define SMOOTH_DL_ERR_VAL        GetLastError()
+#else
+#  include <dlfcn.h>
+#  define SMOOTH_DL_HANDLE         void *
+#  define SMOOTH_DL_OPEN(path)     dlopen((path), RTLD_LAZY | RTLD_LOCAL)
+#  define SMOOTH_DL_SYM(h, name)   dlsym((h), (name))
+#  define SMOOTH_DL_CLOSE(h)       dlclose(h)
+#  define SMOOTH_DL_ERR_FMT        "dlopen error=%s"
+#  define SMOOTH_DL_ERR_VAL        (dlerror() ? dlerror() : "(none)")
+#endif
 
 #include <cstdarg>
 #include <cstdint>
@@ -433,13 +451,13 @@ int main(int argc, char **argv)
     const char *dllPath = (argc > 1) ? argv[1] : "build-mingw/smooth.ofx";
     std::printf("[host-smoke] loading %s\n", dllPath);
 
-    HMODULE dll = LoadLibraryA(dllPath);
-    if (!dll) { std::printf("FAIL: LoadLibrary failed (error=%lu)\n", GetLastError()); return 1; }
+    SMOOTH_DL_HANDLE dll = SMOOTH_DL_OPEN(dllPath);
+    if (!dll) { std::printf("FAIL: " SMOOTH_DL_ERR_FMT "\n", SMOOTH_DL_ERR_VAL); return 1; }
 
     typedef int           (*GetNumFn)(void);
     typedef OfxPlugin *   (*GetPluginFn)(int);
-    GetNumFn    getNum    = (GetNumFn)    GetProcAddress(dll, "OfxGetNumberOfPlugins");
-    GetPluginFn getPlugin = (GetPluginFn) GetProcAddress(dll, "OfxGetPlugin");
+    GetNumFn    getNum    = (GetNumFn)    SMOOTH_DL_SYM(dll, "OfxGetNumberOfPlugins");
+    GetPluginFn getPlugin = (GetPluginFn) SMOOTH_DL_SYM(dll, "OfxGetPlugin");
     if (!getNum || !getPlugin) { std::printf("FAIL: missing exports\n"); return 2; }
 
     int n = getNum();
@@ -604,7 +622,7 @@ int main(int argc, char **argv)
     st = plugin->mainEntry(kOfxActionUnload, nullptr, nullptr, nullptr);
     std::printf("[host-smoke] kOfxActionUnload -> %d\n", st);
 
-    FreeLibrary(dll);
+    SMOOTH_DL_CLOSE(dll);
     std::printf("[host-smoke] DONE\n");
     return 0;
 }

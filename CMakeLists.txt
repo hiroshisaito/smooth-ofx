@@ -96,13 +96,119 @@ else()
     )
 endif()
 
-# --- スモークテスト用のミニホスト (Windows のみ) ---
+# --- スモークテスト用のミニホスト (cross-platform) ---
 option(BUILD_TESTS "Build host smoke test" ON)
-if(BUILD_TESTS AND WIN32)
+if(BUILD_TESTS)
     add_executable(host_smoke tests/host_smoke.cpp)
     target_include_directories(host_smoke PRIVATE ${OFX_INCLUDE_DIR})
     set_target_properties(host_smoke PROPERTIES CXX_STANDARD 17)
     if(MSVC)
         target_compile_options(host_smoke PRIVATE /utf-8)
     endif()
+    if(UNIX AND NOT APPLE)
+        # Linux: dlopen needs -ldl
+        target_link_libraries(host_smoke PRIVATE dl)
+    endif()
+endif()
+
+# --- Rust core (smooth_core) integration ---
+# Phase A: ビルド経路を整備するだけ (デフォルト OFF)。
+# C++ 側で smooth_core を呼ぶラッパが揃った段階で ON に切り替える。
+option(USE_RUST_CORE "Build & link smooth_core Rust crate (Phase A: infrastructure only)" OFF)
+
+if(USE_RUST_CORE)
+    set(RUST_MANIFEST "${CMAKE_SOURCE_DIR}/smooth-ae/rust/smooth_core/Cargo.toml")
+    set(RUST_TARGET_DIR "${CMAKE_BINARY_DIR}/cargo-target")
+
+    if(NOT EXISTS "${RUST_MANIFEST}")
+        message(FATAL_ERROR
+            "smooth_core Cargo.toml not found at ${RUST_MANIFEST}\n"
+            "Run: git submodule update --init smooth-ae"
+        )
+    endif()
+
+    find_program(CARGO_EXECUTABLE cargo)
+    if(NOT CARGO_EXECUTABLE)
+        message(FATAL_ERROR "cargo not found in PATH; install Rust (https://rustup.rs) or disable USE_RUST_CORE")
+    endif()
+
+    # CMake arch -> Rust target triple
+    set(_RUST_TARGETS "")
+    if(APPLE)
+        if(CMAKE_OSX_ARCHITECTURES)
+            foreach(_ARCH IN LISTS CMAKE_OSX_ARCHITECTURES)
+                if(_ARCH STREQUAL "arm64")
+                    list(APPEND _RUST_TARGETS "aarch64-apple-darwin")
+                elseif(_ARCH STREQUAL "x86_64")
+                    list(APPEND _RUST_TARGETS "x86_64-apple-darwin")
+                else()
+                    message(FATAL_ERROR "Unsupported CMAKE_OSX_ARCHITECTURES entry: ${_ARCH}")
+                endif()
+            endforeach()
+        else()
+            # No explicit arch -> use host
+            if(CMAKE_HOST_SYSTEM_PROCESSOR STREQUAL "arm64")
+                list(APPEND _RUST_TARGETS "aarch64-apple-darwin")
+            else()
+                list(APPEND _RUST_TARGETS "x86_64-apple-darwin")
+            endif()
+        endif()
+    elseif(WIN32)
+        list(APPEND _RUST_TARGETS "x86_64-pc-windows-msvc")
+    else()
+        list(APPEND _RUST_TARGETS "x86_64-unknown-linux-gnu")
+    endif()
+
+    # Per-arch cargo build commands; collect resulting static libs for lipo merge.
+    set(_RUST_LIB_FILES "")
+    foreach(_RUST_TGT IN LISTS _RUST_TARGETS)
+        set(_LIB_PATH "${RUST_TARGET_DIR}/${_RUST_TGT}/release/libsmooth_core.a")
+        list(APPEND _RUST_LIB_FILES "${_LIB_PATH}")
+
+        set(_CARGO_ENV "")
+        if(APPLE AND CMAKE_OSX_DEPLOYMENT_TARGET)
+            list(APPEND _CARGO_ENV "MACOSX_DEPLOYMENT_TARGET=${CMAKE_OSX_DEPLOYMENT_TARGET}")
+        endif()
+
+        add_custom_command(
+            OUTPUT  "${_LIB_PATH}"
+            COMMAND ${CMAKE_COMMAND} -E env ${_CARGO_ENV}
+                    ${CARGO_EXECUTABLE} build --release
+                            --manifest-path "${RUST_MANIFEST}"
+                            --target-dir "${RUST_TARGET_DIR}"
+                            --target ${_RUST_TGT}
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            COMMENT "cargo build smooth_core (${_RUST_TGT})"
+            VERBATIM
+        )
+        # 個別の cargo target のため、cargo の incremental に任せる
+        # (CMake の依存ファイル列挙だと .rs を全部明記する必要が出るため省略)。
+        set_source_files_properties("${_LIB_PATH}" PROPERTIES SYMBOLIC TRUE)
+    endforeach()
+
+    list(LENGTH _RUST_LIB_FILES _NUM_RUST_LIBS)
+    if(APPLE AND _NUM_RUST_LIBS GREATER 1)
+        # マルチアーキ: lipo で fat static lib に統合
+        set(SMOOTH_CORE_LIB "${RUST_TARGET_DIR}/libsmooth_core_universal.a")
+        add_custom_command(
+            OUTPUT  "${SMOOTH_CORE_LIB}"
+            COMMAND lipo -create -output "${SMOOTH_CORE_LIB}" ${_RUST_LIB_FILES}
+            DEPENDS ${_RUST_LIB_FILES}
+            COMMENT "lipo merge smooth_core (${_RUST_TARGETS})"
+            VERBATIM
+        )
+    else()
+        list(GET _RUST_LIB_FILES 0 SMOOTH_CORE_LIB)
+    endif()
+
+    add_custom_target(smooth_core_lib ALL DEPENDS "${SMOOTH_CORE_LIB}")
+    add_dependencies(smooth smooth_core_lib)
+    target_link_libraries(smooth PRIVATE "${SMOOTH_CORE_LIB}")
+    target_include_directories(smooth PRIVATE
+        "${CMAKE_SOURCE_DIR}/smooth-ae/rust/smooth_core/include"
+    )
+    target_compile_definitions(smooth PRIVATE SMOOTH_OFX_USE_RUST_CORE=1)
+
+    message(STATUS "smooth_core: rust targets = ${_RUST_TARGETS}")
+    message(STATUS "smooth_core: linking ${SMOOTH_CORE_LIB}")
 endif()

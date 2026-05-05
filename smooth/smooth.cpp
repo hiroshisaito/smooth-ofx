@@ -23,6 +23,12 @@
 #include "8link.h"
 #include "Lack.h"
 
+#ifdef SMOOTH_OFX_USE_RUST_CORE
+extern "C" {
+#include "smooth_core_ffi.h"
+}
+#endif
+
 //---------------------------------------------------------------------------//
 // ホスト情報
 //---------------------------------------------------------------------------//
@@ -580,6 +586,156 @@ destroyInstance(OfxImageEffectHandle effect)
     return kOfxStatOK;
 }
 
+#ifdef SMOOTH_OFX_USE_RUST_CORE
+//---------------------------------------------------------------------------//
+// Rust core (smooth_core) ラッパ
+//
+// OFX のピクセル順 = {r, g, b, a} に対し、AE 由来の smooth_core は
+// {alpha, red, green, blue} を期待する。バイト順を1チャネル分ローテートする
+// in-place swizzle で吸収する。
+//
+// 適用範囲: 8bpc / 32bpc float のみ。16bpc は smooth_core 側の max_value が
+// 0x8000 (AE 流) で OFX の 0xFFFF と異なるため、当面 C++ 経路を維持する。
+//---------------------------------------------------------------------------//
+template <typename Pixel>
+static inline void
+swizzleRgbaToArgbInPlace(Pixel *buf, std::size_t n)
+{
+    // OFX RGBA layout: byte[0]=r, byte[1]=g, byte[2]=b, byte[3]=a
+    // AE  ARGB layout: byte[0]=alpha, byte[1]=red, byte[2]=green, byte[3]=blue
+    // 同じ Pixel 構造体 (.r/.g/.b/.a が byte 0/1/2/3) を介して書き戻すと、
+    // バイトレベルでは ARGB として解釈される。
+    using S = decltype(buf->r);
+    static_assert(sizeof(Pixel) == 4 * sizeof(S),
+                  "smooth_core swizzle assumes 4 channels of equal scalar size");
+    for (std::size_t i = 0; i < n; i++) {
+        const S r = buf[i].r;
+        const S g = buf[i].g;
+        const S b = buf[i].b;
+        const S a = buf[i].a;
+        buf[i].r = a;  // byte[0] becomes alpha
+        buf[i].g = r;  // byte[1] becomes red
+        buf[i].b = g;  // byte[2] becomes green
+        buf[i].a = b;  // byte[3] becomes blue
+    }
+}
+
+template <typename Pixel>
+static inline void
+swizzleArgbToRgbaInPlace(Pixel *buf, std::size_t n)
+{
+    using S = decltype(buf->r);
+    for (std::size_t i = 0; i < n; i++) {
+        // 現在のバッファは ARGB として書かれている: byte[0/1/2/3] = a/r/g/b
+        // これを構造体経由で読むと .r=a, .g=r, .b=g, .a=b になっている。
+        const S a = buf[i].r;
+        const S r = buf[i].g;
+        const S g = buf[i].b;
+        const S b = buf[i].a;
+        buf[i].r = r;
+        buf[i].g = g;
+        buf[i].b = b;
+        buf[i].a = a;
+    }
+}
+
+// preProcess + process_row_range をまとめて呼ぶ。出力は dst (RGBA layout に
+// 戻した状態) に書かれる。src は ARGB layout に置き換わる (呼び出し側はその後
+// src を読まない前提で OK)。
+template <typename Pixel>
+static void
+smoothing_via_rust(Pixel *src, Pixel *dst, int width, int height,
+                   bool white_option, double range_param, double line_weight_param);
+
+template <>
+void
+smoothing_via_rust<OfxRGBAColourB>(OfxRGBAColourB *src, OfxRGBAColourB *dst,
+                                   int width, int height, bool white_option,
+                                   double range_param, double line_weight_param)
+{
+    const std::size_t pixelCount = (std::size_t)width * (std::size_t)height;
+    const int rowbytes = width * (int)sizeof(OfxRGBAColourB);
+
+    swizzleRgbaToArgbInPlace<OfxRGBAColourB>(src, pixelCount);
+
+    smooth_bbox_t bbox = {0, 0, 1, 1};
+    smooth_core_preprocess_u8((void *)src, rowbytes, height,
+                              white_option ? 1 : 0, &bbox);
+
+    int x1 = bbox.left, y1 = bbox.top, x2 = bbox.right, y2 = bbox.bottom;
+    if (y1 == 0)        y1 = 1;
+    if (x1 == 0)        x1 = 1;
+    if (x2 == width)    x2 -= 1;
+    if (y2 == height)   y2 -= 1;
+
+    std::memcpy(dst, src, sizeof(OfxRGBAColourB) * pixelCount);
+
+    if (x2 > x1 && y2 > y1) {
+        smooth_row_range_args_t args = {0};
+        args.in_ptr        = (void *)src;
+        args.out_ptr       = (void *)dst;
+        args.width         = width;
+        args.logical_width = width;
+        args.height        = height;
+        args.rowbytes      = rowbytes;
+        args.range         = (uint32_t)(range_param * (255.0 * 4) / 100.0);
+        args.line_weight   = (float)(line_weight_param / 2.0 + 0.5);
+        args.j_start       = y1;
+        args.j_end         = y2;
+        args.i_start       = x1;
+        args.i_end         = x2;
+        args.parallel      = 1;  // rayon strip-parallel (smooth_core 側で 32 行未満は serial fallback)
+        smooth_core_process_row_range_u8(&args);
+    }
+
+    swizzleArgbToRgbaInPlace<OfxRGBAColourB>(dst, pixelCount);
+}
+
+template <>
+void
+smoothing_via_rust<OfxRGBAColourF>(OfxRGBAColourF *src, OfxRGBAColourF *dst,
+                                   int width, int height, bool white_option,
+                                   double range_param, double line_weight_param)
+{
+    const std::size_t pixelCount = (std::size_t)width * (std::size_t)height;
+    const int rowbytes = width * (int)sizeof(OfxRGBAColourF);
+
+    swizzleRgbaToArgbInPlace<OfxRGBAColourF>(src, pixelCount);
+
+    smooth_bbox_t bbox = {0, 0, 1, 1};
+    smooth_core_preprocess_f32((void *)src, rowbytes, height,
+                               white_option ? 1 : 0, &bbox);
+
+    int x1 = bbox.left, y1 = bbox.top, x2 = bbox.right, y2 = bbox.bottom;
+    if (y1 == 0)        y1 = 1;
+    if (x1 == 0)        x1 = 1;
+    if (x2 == width)    x2 -= 1;
+    if (y2 == height)   y2 -= 1;
+
+    std::memcpy(dst, src, sizeof(OfxRGBAColourF) * pixelCount);
+
+    if (x2 > x1 && y2 > y1) {
+        smooth_row_range_args_f32_t args = {0};
+        args.in_ptr        = (void *)src;
+        args.out_ptr       = (void *)dst;
+        args.width         = width;
+        args.logical_width = width;
+        args.height        = height;
+        args.rowbytes      = rowbytes;
+        args.range         = (float)(range_param * (1.0 * 4) / 100.0);
+        args.line_weight   = (float)(line_weight_param / 2.0 + 0.5);
+        args.j_start       = y1;
+        args.j_end         = y2;
+        args.i_start       = x1;
+        args.i_end         = x2;
+        args.parallel      = 1;
+        smooth_core_process_row_range_f32(&args);
+    }
+
+    swizzleArgbToRgbaInPlace<OfxRGBAColourF>(dst, pixelCount);
+}
+#endif // SMOOTH_OFX_USE_RUST_CORE
+
 //---------------------------------------------------------------------------//
 // render
 //---------------------------------------------------------------------------//
@@ -707,21 +863,38 @@ render(OfxImageEffectHandle instance,
         }
 
         // アルゴリズム実行 (srcBuf は preProcess で改変される)
+        // SMOOTH_OFX_USE_RUST_CORE 定義時は 8bpc / 32bpc float を smooth_core
+        // (AE 由来の Rust 実装) 経由で処理。16bpc は max_value 規約 (OFX:0xFFFF
+        // vs AE:0x8000) が異なるため当面 C++ 経路を維持。
         if (isFloat) {
+#ifdef SMOOTH_OFX_USE_RUST_CORE
+            smoothing_via_rust<OfxRGBAColourF>((OfxRGBAColourF *)srcBuf,
+                                               (OfxRGBAColourF *)dstBuf,
+                                               width, height,
+                                               whiteOption != 0, range, lineWeight);
+#else
             smoothing<OfxRGBAColourF>((OfxRGBAColourF *)srcBuf,
                                       (OfxRGBAColourF *)dstBuf,
                                       width, height,
                                       whiteOption != 0, range, lineWeight);
+#endif
         } else if (is16bit) {
             smoothing<OfxRGBAColourS>((OfxRGBAColourS *)srcBuf,
                                       (OfxRGBAColourS *)dstBuf,
                                       width, height,
                                       whiteOption != 0, range, lineWeight);
         } else {
+#ifdef SMOOTH_OFX_USE_RUST_CORE
+            smoothing_via_rust<OfxRGBAColourB>((OfxRGBAColourB *)srcBuf,
+                                               (OfxRGBAColourB *)dstBuf,
+                                               width, height,
+                                               whiteOption != 0, range, lineWeight);
+#else
             smoothing<OfxRGBAColourB>((OfxRGBAColourB *)srcBuf,
                                       (OfxRGBAColourB *)dstBuf,
                                       width, height,
                                       whiteOption != 0, range, lineWeight);
+#endif
         }
 
         // 出力をホストの期待形式 (プリマルチプライド) に戻す
