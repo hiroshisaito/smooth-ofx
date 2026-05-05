@@ -649,6 +649,120 @@ int main(int argc, char **argv)
     }
 
     // ----------------------------------------------------------------------
+    // 診断モード: SMOOTH_DIAG=transparent
+    //   全白画像 + whiteOption=true で render を 8bpc / 16bpc / float の 3 経路に対して走らせ、
+    //   dst の null pixel 数 (RGB すべて 0) を集計して transparent オプションが
+    //   各経路で機能しているか確認する。Resolve で 16/float の transparent が NG と
+    //   報告されたが、それがホスト側 (実際に届く white の値が異なる) なのか
+    //   プラグイン側 (Rust 経路 / 16bpc C++ 経路のバグ) なのかを切り分けるため。
+    // ----------------------------------------------------------------------
+    if (const char *diag = std::getenv("SMOOTH_DIAG")) {
+        if (std::strcmp(diag, "range") == 0) {
+            // range の効力確認: 既存の 64x32 対角ストライプ画像 (smooth が確実に反応する) に
+            // 対し range を 0/1/5/10/50/100 で render し、dst の intermediate ピクセル
+            // (R==G==B かつ非 0 / 非 max) 数の変化を観察する。range が効いていれば
+            // 値変化に応じて分布が変わるはず。
+            const int W = 64, H = 32;
+
+            auto run = [&](const char *label, auto pixel_tag, const char *bitDepth, unsigned int maxv, double rangeVal) {
+                using Pixel = decltype(pixel_tag);
+                std::vector<Pixel> srcImg(W * H), dstImg(W * H);
+                make_test_image<Pixel>(srcImg.data(), W, H, maxv);
+                std::memset(dstImg.data(), 0, sizeof(Pixel) * W * H);
+
+                auto rIt = eff.params.find("range");
+                if (rIt != eff.params.end()) {
+                    prop_set_double(PROP_SET_HANDLE(rIt->second->props.get()),
+                                    kOfxParamPropDefault, 0, rangeVal);
+                }
+
+                srcClip->imageProps = std::make_unique<PropertySet>();
+                dstClip->imageProps = std::make_unique<PropertySet>();
+                setup_image_props(*srcClip->imageProps, srcImg.data(), W, H,
+                                  bitDepth, kOfxImageComponentRGBA, W * (int)sizeof(Pixel));
+                setup_image_props(*dstClip->imageProps, dstImg.data(), W, H,
+                                  bitDepth, kOfxImageComponentRGBA, W * (int)sizeof(Pixel));
+
+                PropertySet renderArgs;
+                prop_set_double(PROP_SET_HANDLE(&renderArgs), kOfxPropTime, 0, 0.0);
+                int rw[4] = { 0, 0, W, H };
+                prop_set_intN(PROP_SET_HANDLE(&renderArgs), kOfxImageEffectPropRenderWindow, 4, rw);
+
+                OfxStatus rs = plugin->mainEntry(kOfxImageEffectActionRender, &eff,
+                                                 PROP_SET_HANDLE(&renderArgs), nullptr);
+                int pure0 = 0, pureMax = 0, intermed = 0;
+                for (auto &p : dstImg) {
+                    if (p.r == (decltype(p.r))0 && p.g == (decltype(p.g))0 && p.b == (decltype(p.b))0) ++pure0;
+                    else if (p.r == (decltype(p.r))maxv && p.g == (decltype(p.g))maxv && p.b == (decltype(p.b))maxv) ++pureMax;
+                    else if (p.r == p.g && p.g == p.b) ++intermed;
+                }
+                std::printf("[host-diag] [%s range=%6.1f] render=%d pure0=%d pureMax=%d intermediate=%d / %d\n",
+                            label, rangeVal, rs, pure0, pureMax, intermed, W * H);
+            };
+
+            std::printf("[host-diag] running range diagnostic (diagonal stripes %dx%d)\n", W, H);
+            for (double rv : {0.0, 1.0, 5.0, 10.0, 50.0, 100.0}) {
+                run(" 8bpc", OfxRGBAColourB{}, kOfxBitDepthByte,  0xFFu,    rv);
+                run("16bpc", OfxRGBAColourS{}, kOfxBitDepthShort, 0xFFFFu,  rv);
+                run("float", OfxRGBAColourF{}, kOfxBitDepthFloat, 1u,       rv);
+            }
+        } else if (std::strcmp(diag, "transparent") == 0) {
+            // whiteOption の default を 1 (true) に上書き
+            auto woIt = eff.params.find("whiteOption");
+            if (woIt != eff.params.end()) {
+                prop_set_int(PROP_SET_HANDLE(woIt->second->props.get()),
+                             kOfxParamPropDefault, 0, 1);
+            }
+
+            const int W = 16, H = 8;
+
+            auto run = [&](const char *label, auto pixel_tag, const char *bitDepth, double maxv) {
+                using Pixel = decltype(pixel_tag);
+                std::vector<Pixel> srcImg(W * H), dstImg(W * H);
+                // 全ピクセルを白に
+                for (auto &p : srcImg) {
+                    p.r = (decltype(p.r))maxv;
+                    p.g = (decltype(p.g))maxv;
+                    p.b = (decltype(p.b))maxv;
+                    p.a = (decltype(p.a))maxv;
+                }
+                std::memset(dstImg.data(), 0, sizeof(Pixel) * W * H);
+
+                srcClip->imageProps = std::make_unique<PropertySet>();
+                dstClip->imageProps = std::make_unique<PropertySet>();
+                setup_image_props(*srcClip->imageProps, srcImg.data(), W, H,
+                                  bitDepth, kOfxImageComponentRGBA, W * (int)sizeof(Pixel));
+                setup_image_props(*dstClip->imageProps, dstImg.data(), W, H,
+                                  bitDepth, kOfxImageComponentRGBA, W * (int)sizeof(Pixel));
+
+                PropertySet renderArgs;
+                prop_set_double(PROP_SET_HANDLE(&renderArgs), kOfxPropTime, 0, 0.0);
+                int rw[4] = { 0, 0, W, H };
+                prop_set_intN(PROP_SET_HANDLE(&renderArgs), kOfxImageEffectPropRenderWindow, 4, rw);
+
+                OfxStatus rs = plugin->mainEntry(kOfxImageEffectActionRender, &eff,
+                                                 PROP_SET_HANDLE(&renderArgs), nullptr);
+                int nulled = 0, kept = 0;
+                for (auto &p : dstImg) {
+                    if (p.r == (decltype(p.r))0 && p.g == (decltype(p.g))0 && p.b == (decltype(p.b))0) ++nulled;
+                    else ++kept;
+                }
+                std::printf("[host-diag] [%s] white_option=1 all-white -> render=%d nulled=%d kept=%d / %d\n",
+                            label, rs, nulled, kept, W * H);
+            };
+
+            std::printf("[host-diag] running transparent diagnostic (all-white %dx%d, whiteOption=1)\n", W, H);
+            run(" 8bpc / pure0xFF",       OfxRGBAColourB{}, kOfxBitDepthByte,  255.0);
+            run("16bpc / pure0xFFFF",     OfxRGBAColourS{}, kOfxBitDepthShort, 65535.0);
+            run("16bpc / AE-style0x8000", OfxRGBAColourS{}, kOfxBitDepthShort, 32768.0);
+            run("16bpc / drift0xFEFE",    OfxRGBAColourS{}, kOfxBitDepthShort, 65278.0);
+            run("float / pure1.0",        OfxRGBAColourF{}, kOfxBitDepthFloat, 1.0);
+            run("float / drift0.998",     OfxRGBAColourF{}, kOfxBitDepthFloat, 0.998);
+            run("float / drift1.003",     OfxRGBAColourF{}, kOfxBitDepthFloat, 1.003);
+        }
+    }
+
+    // ----------------------------------------------------------------------
     // Bench モード (env var SMOOTH_BENCH_SIZE=WxH, SMOOTH_BENCH_ITERS=N で起動)
     // 8bpc と float の render を N 回 wall-clock 計測。median/min/max を出す。
     // 既存のスモーク 3 パス完了後に走らせるので、副作用は計測のみ。

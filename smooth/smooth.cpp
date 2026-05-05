@@ -161,14 +161,45 @@ inline void premultBuffer<OfxRGBAColourF>(OfxRGBAColourF *buf, int count)
 }
 
 //---------------------------------------------------------------------------//
+// isWhitePixel: ピクセルが「白」とみなせるかの判定。ホスト側 (DaVinci Resolve)
+// が 16bpc / float で ピュアな 0xFFFF / 1.0 ではない値を「白」として渡してくる
+// ケースに対応するため、type 別に許容差を持たせる。
+//
+// - 8bpc:  厳密一致 (0xFF を期待。Resolve も 0xFF で渡してくる)
+// - 16bpc: 0xFFFF (OFX 1.5.1 標準) と 0x8000 (AE 流の half-range 規約) の両方を
+//          許容。多少のドリフト (±0x0100) も吸収
+// - float: 1.0 ± 0.005 程度の許容差で判定 (色管理によるわずかなずれを吸収)
+//---------------------------------------------------------------------------//
+template <typename PixelType>
+static inline bool isWhitePixel(const PixelType &p);
+
+template <> inline bool isWhitePixel<OfxRGBAColourB>(const OfxRGBAColourB &p) {
+    return p.r == 0xFF && p.g == 0xFF && p.b == 0xFF;
+}
+template <> inline bool isWhitePixel<OfxRGBAColourS>(const OfxRGBAColourS &p) {
+    auto near = [](unsigned int target, unsigned int v, unsigned int tol) {
+        return (v + tol >= target) && (v <= target + tol);
+    };
+    constexpr unsigned int TOL = 0x0100;
+    bool near_full = near(0xFFFF, p.r, TOL) && near(0xFFFF, p.g, TOL) && near(0xFFFF, p.b, TOL);
+    bool near_half = near(0x8000, p.r, TOL) && near(0x8000, p.g, TOL) && near(0x8000, p.b, TOL);
+    return near_full || near_half;
+}
+template <> inline bool isWhitePixel<OfxRGBAColourF>(const OfxRGBAColourF &p) {
+    constexpr float EPS = 0.005f;
+    return  p.r > 1.0f - EPS && p.r < 1.0f + EPS
+         && p.g > 1.0f - EPS && p.g < 1.0f + EPS
+         && p.b > 1.0f - EPS && p.b < 1.0f + EPS;
+}
+
+//---------------------------------------------------------------------------//
 // preProcess: 白抜き + 処理領域（extent）の検出
 //   in_ptr はタイトに詰められた width*height のバッファを想定
 //---------------------------------------------------------------------------//
 template <typename PixelType>
 static void preProcess(PixelType *in_ptr, int width, int height, OfxRectI *rect, bool is_white_trans)
 {
-    PixelType key, null_pixel;
-    getWhitePixel(&key);
+    PixelType null_pixel;
     getNullPixel(&null_pixel);
 
     int top = 0, left = width, right = 0, bottom = 0;
@@ -181,10 +212,9 @@ static void preProcess(PixelType *in_ptr, int width, int height, OfxRectI *rect,
 
         for (int i = 0; i < width; i++, t++)
         {
-            if (is_white_trans &&
-                key.r == in_ptr[t].r &&
-                key.g == in_ptr[t].g &&
-                key.b == in_ptr[t].b)
+            const bool is_white = isWhitePixel<PixelType>(in_ptr[t]);
+
+            if (is_white_trans && is_white)
             {
                 in_ptr[t] = null_pixel;
                 continue;
@@ -193,10 +223,7 @@ static void preProcess(PixelType *in_ptr, int width, int height, OfxRectI *rect,
             if (in_ptr[t].a == 0)
                 continue;
 
-            if (!is_white_trans &&
-                key.r == in_ptr[t].r &&
-                key.g == in_ptr[t].g &&
-                key.b == in_ptr[t].b)
+            if (!is_white_trans && is_white)
             {
                 continue;
             }
@@ -543,9 +570,9 @@ describeInContext(OfxImageEffectHandle effect, OfxPropertySetHandle /*inArgs*/)
     gPropHost->propSetDouble(props, kOfxParamPropMin, 0, 0.0);
     gPropHost->propSetDouble(props, kOfxParamPropMax, 0, 100.0);
     gPropHost->propSetDouble(props, kOfxParamPropDisplayMin, 0, 0.0);
-    gPropHost->propSetDouble(props, kOfxParamPropDisplayMax, 0, 10.0);
+    gPropHost->propSetDouble(props, kOfxParamPropDisplayMax, 0, 100.0);
     gPropHost->propSetString(props, kOfxPropLabel, 0, "range");
-    gPropHost->propSetString(props, kOfxParamPropHint, 0, "Color distance threshold for treating neighboring pixels as equal");
+    gPropHost->propSetString(props, kOfxParamPropHint, 0, "Color distance threshold for treating neighboring pixels as equal (0=tight, 100=disable smoothing)");
     gPropHost->propSetString(props, kOfxParamPropScriptName, 0, kParamRange);
 
     gParamHost->paramDefine(paramSet, kOfxParamTypeDouble, kParamLineWeight, &props);
@@ -741,6 +768,24 @@ smoothing_via_rust<OfxRGBAColourF>(OfxRGBAColourF *src, OfxRGBAColourF *dst,
 {
     const std::size_t pixelCount = (std::size_t)width * (std::size_t)height;
     const int rowbytes = width * (int)sizeof(OfxRGBAColourF);
+
+    // Rust 側 (smooth_core::Pixel32::white_key) は (1.0, 1.0, 1.0, 1.0) との
+    // 厳密 == 判定。Resolve の float は色管理で 1.0 ピッタリにならない場合が
+    // あるため、許容差内のピクセルを 1.0 にスナップしてから Rust に渡す。
+    // (white_option=false でも処理しても害がないが、無駄を避けて gating)
+    if (white_option) {
+        constexpr float EPS = 0.005f;
+        for (std::size_t i = 0; i < pixelCount; i++) {
+            if (src[i].r > 1.0f - EPS && src[i].r < 1.0f + EPS &&
+                src[i].g > 1.0f - EPS && src[i].g < 1.0f + EPS &&
+                src[i].b > 1.0f - EPS && src[i].b < 1.0f + EPS)
+            {
+                src[i].r = 1.0f;
+                src[i].g = 1.0f;
+                src[i].b = 1.0f;
+            }
+        }
+    }
 
     swizzleRgbaToArgbInPlace<OfxRGBAColourF>(src, pixelCount);
 
