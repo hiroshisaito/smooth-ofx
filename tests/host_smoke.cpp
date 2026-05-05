@@ -29,6 +29,8 @@
 #  define SMOOTH_DL_ERR_VAL        (dlerror() ? dlerror() : "(none)")
 #endif
 
+#include <algorithm>
+#include <chrono>
 #include <cstdarg>
 #include <cstdint>
 #include <cstdio>
@@ -612,6 +614,81 @@ int main(int argc, char **argv)
 
         write_ppm<OfxRGBAColourF>("build-mingw/smoke_src_float.ppm", srcImg.data(), W, H, 1);
         write_ppm<OfxRGBAColourF>("build-mingw/smoke_dst_float.ppm", dstImg.data(), W, H, 1);
+    }
+
+    // ----------------------------------------------------------------------
+    // Bench モード (env var SMOOTH_BENCH_SIZE=WxH, SMOOTH_BENCH_ITERS=N で起動)
+    // 8bpc と float の render を N 回 wall-clock 計測。median/min/max を出す。
+    // 既存のスモーク 3 パス完了後に走らせるので、副作用は計測のみ。
+    // ----------------------------------------------------------------------
+    if (const char *sizeStr = std::getenv("SMOOTH_BENCH_SIZE")) {
+        int benchW = 1920, benchH = 1080;
+        if (const char *x = std::strchr(sizeStr, 'x')) {
+            benchW = std::atoi(sizeStr);
+            benchH = std::atoi(x + 1);
+        } else if (const char *X = std::strchr(sizeStr, 'X')) {
+            benchW = std::atoi(sizeStr);
+            benchH = std::atoi(X + 1);
+        }
+        if (benchW <= 0 || benchH <= 0) { benchW = 1920; benchH = 1080; }
+
+        int iters = 30;
+        if (const char *itersStr = std::getenv("SMOOTH_BENCH_ITERS")) {
+            int v = std::atoi(itersStr);
+            if (v > 0) iters = v;
+        }
+
+        auto run_bench = [&](const char *label, auto pixel_tag, const char *bitDepth, double maxv) {
+            using Pixel = decltype(pixel_tag);
+            const std::size_t pixelCount = (std::size_t)benchW * (std::size_t)benchH;
+            std::vector<Pixel> srcImg(pixelCount);
+            std::vector<Pixel> dstImg(pixelCount);
+            make_test_image<Pixel>(srcImg.data(), benchW, benchH, (unsigned int)maxv);
+
+            srcClip->imageProps = std::make_unique<PropertySet>();
+            dstClip->imageProps = std::make_unique<PropertySet>();
+            const int rowbytes = benchW * (int)sizeof(Pixel);
+            setup_image_props(*srcClip->imageProps, srcImg.data(), benchW, benchH,
+                              bitDepth, kOfxImageComponentRGBA, rowbytes);
+            setup_image_props(*dstClip->imageProps, dstImg.data(), benchW, benchH,
+                              bitDepth, kOfxImageComponentRGBA, rowbytes);
+
+            PropertySet renderArgs;
+            prop_set_double(PROP_SET_HANDLE(&renderArgs), kOfxPropTime, 0, 0.0);
+            int rw[4] = { 0, 0, benchW, benchH };
+            prop_set_intN(PROP_SET_HANDLE(&renderArgs), kOfxImageEffectPropRenderWindow, 4, rw);
+
+            std::vector<double> ms; ms.reserve(iters);
+            for (int i = 0; i < iters; ++i) {
+                // src は preProcess 等で改変されるので毎回作り直す
+                make_test_image<Pixel>(srcImg.data(), benchW, benchH, (unsigned int)maxv);
+
+                auto t0 = std::chrono::steady_clock::now();
+                OfxStatus rs = plugin->mainEntry(kOfxImageEffectActionRender, &eff,
+                                                 PROP_SET_HANDLE(&renderArgs), nullptr);
+                auto t1 = std::chrono::steady_clock::now();
+                if (rs != kOfxStatOK && rs != kOfxStatReplyDefault) {
+                    std::printf("[host-bench] [%s] render iter %d failed -> %d\n", label, i, rs);
+                    return;
+                }
+                double elapsed_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
+                ms.push_back(elapsed_ms);
+            }
+            std::sort(ms.begin(), ms.end());
+            double sum = 0; for (double v : ms) sum += v;
+            double mean   = sum / ms.size();
+            double median = ms[ms.size() / 2];
+            double minv   = ms.front();
+            double maxv2  = ms.back();
+            double mp_per_s = (double)pixelCount / 1e6 / (median / 1000.0);
+            std::printf("[host-bench] [%s %dx%d N=%d] min=%.2fms median=%.2fms mean=%.2fms max=%.2fms => %.1f Mpx/s\n",
+                        label, benchW, benchH, iters, minv, median, mean, maxv2, mp_per_s);
+        };
+
+        std::printf("[host-bench] running %dx%d x %d iters\n", benchW, benchH, iters);
+        run_bench(" 8bpc", OfxRGBAColourB{}, kOfxBitDepthByte,  255.0);
+        run_bench(" 16bpc", OfxRGBAColourS{}, kOfxBitDepthShort, 65535.0);
+        run_bench("float", OfxRGBAColourF{}, kOfxBitDepthFloat, 1.0);
     }
 
     // destroyInstance
