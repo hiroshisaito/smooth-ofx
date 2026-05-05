@@ -24,8 +24,10 @@ is internal (Rust-core algorithm) plus build-info UI.
   v0.1.0) is now used for the 8-bit and 32-bit float code paths.
   rayon strip-parallel internally; output verified byte-identical to
   the 1.4.0 C++ implementation via host_smoke + PPM cmp.
-- New CMake option `USE_RUST_CORE` (default OFF) enables the Rust-core
-  build. Distributed macOS zips are built with `USE_RUST_CORE=ON`.
+- New CMake option `USE_RUST_CORE` (default **ON** since 1.6.0) enables
+  the Rust-core build. Pass `-DUSE_RUST_CORE=OFF` to build a C++-only
+  baseline if the Rust toolchain is unavailable. Distributed macOS zips
+  are built with the default (ON).
 - Read-only `build` parameter in Effect Controls showing the plugin
   version, OFX-port git SHA (with `+dirty` flag), and the Rust core
   build identity. Lets UAT confirm at a glance which build is loaded.

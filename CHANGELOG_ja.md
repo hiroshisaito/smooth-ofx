@@ -24,8 +24,10 @@ OFX 移植のバージョンを AE 側 fork
   利用) を 8-bit / 32-bit float 経路で採用。rayon による
   strip-parallel 並列化 internally。出力は 1.4.0 の C++ 実装と
   host_smoke + PPM cmp でバイト一致を確認済み。
-- CMake オプション `USE_RUST_CORE` (default OFF) を新設。ON にすると
-  Rust core を有効化。配布版 macOS zip は `USE_RUST_CORE=ON` でビルド。
+- CMake オプション `USE_RUST_CORE` (1.6.0 以降は **default ON**) を新設、
+  Rust core ビルドを有効化。Rust ツールチェーンが無い環境では
+  `-DUSE_RUST_CORE=OFF` を指定すれば C++ ベースラインでビルド可能。
+  配布版 macOS zip はデフォルト (ON) でビルド。
 - Effect Controls に read-only `build` パラメータを追加。プラグイン
   バージョン + OFX 側 git SHA (`+dirty` フラグ付き) + Rust core の
   build identity を表示し、UAT 中にどのビルドが入っているかを一目で

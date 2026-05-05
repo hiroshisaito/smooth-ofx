@@ -141,9 +141,12 @@ if(BUILD_TESTS)
 endif()
 
 # --- Rust core (smooth_core) integration ---
-# Phase A: ビルド経路を整備するだけ (デフォルト OFF)。
-# C++ 側で smooth_core を呼ぶラッパが揃った段階で ON に切り替える。
-option(USE_RUST_CORE "Build & link smooth_core Rust crate (Phase A: infrastructure only)" OFF)
+# 1.6.0 から default ON。Resolve UAT (macOS, 2026-05-06) で 全項目 PASS:
+# build-id / range / line weight / transparent / 8/16/16f/32f / 線画黒ピクセル無し /
+# 4K (4400x4400) で体感速度向上。
+# Rust toolchain 不在の環境では明示的に -DUSE_RUST_CORE=OFF を指定して C++ baseline で
+# ビルドできる (cargo が見つからない場合は configure 時に FATAL_ERROR で停止)。
+option(USE_RUST_CORE "Build & link smooth_core Rust crate (default ON since 1.6.0)" ON)
 
 if(USE_RUST_CORE)
     set(RUST_MANIFEST "${CMAKE_SOURCE_DIR}/smooth-ae/rust/smooth_core/Cargo.toml")
