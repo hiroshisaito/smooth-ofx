@@ -122,6 +122,23 @@ uint32_t smooth_gpu_mode_flg_u8(
     int32_t         height,
     uint32_t        range);
 
+/* Phase F-2B: link8_square center handler (4 diagonal blend + average) on GPU.
+ *
+ * Operates per-pixel and only writes `dst_ptr[i]` when
+ * `mode_flg_ptr[i] & 0xF == 15`. The caller MUST pre-fill `dst_ptr` with
+ * `src_ptr` (memcpy) so non-15 pixels carry through unchanged.
+ *
+ * Outside expansion (link8_square_blend_outside in smooth_core) is
+ * intentionally NOT included here — that is row/column-sequential and
+ * lands in a later sub-phase. */
+uint32_t smooth_gpu_link8_square_center_u8(
+    const uint32_t *src_ptr,
+    uint32_t       *dst_ptr,
+    const uint32_t *mode_flg_ptr,
+    int32_t         rowbytes,
+    int32_t         height,
+    uint32_t        range);
+
 #ifdef __cplusplus
 }
 #endif

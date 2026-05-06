@@ -23,7 +23,7 @@ use std::sync::{Mutex, OnceLock};
 /// revision. Bump the lower 16 bits whenever any FFI struct changes layout.
 #[no_mangle]
 pub extern "C" fn smooth_gpu_version() -> u32 {
-    0x0000_0004 // bumped: smooth_gpu_mode_flg_u8 added
+    0x0000_0005 // bumped: smooth_gpu_link8_square_center_u8 added
 }
 
 /// Human-readable build identity (crate version + git short sha + dirty).
@@ -76,6 +76,10 @@ struct GpuContext {
     // mode_flg detection (Phase 3-F2A) for u8 ARGB pixels.
     mode_flg_u8_pipeline: wgpu::ComputePipeline,
     mode_flg_u8_bgl:      wgpu::BindGroupLayout,
+
+    // link8_square center (Phase 3-F2B) for u8 ARGB pixels.
+    link8_square_center_u8_pipeline: wgpu::ComputePipeline,
+    link8_square_center_u8_bgl:      wgpu::BindGroupLayout,
 }
 
 static CTX: OnceLock<Mutex<Result<GpuContext, Status>>> = OnceLock::new();
@@ -203,6 +207,38 @@ async fn build_context() -> Result<GpuContext, Status> {
         cache: None,
     });
 
+    // link8_square center compute pipeline (Phase 3-F2B).
+    let l8sq_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some("smooth_gpu link8_square_center_u8.wgsl"),
+        source: wgpu::ShaderSource::Wgsl(include_str!("link8_square_center_u8.wgsl").into()),
+    });
+    let l8sq_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: Some("smooth_gpu link8_square_center_u8 bgl"),
+        entries: &[
+            wgpu::BindGroupLayoutEntry { binding: 0, visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Storage { read_only: true },  has_dynamic_offset: false, min_binding_size: None }, count: None },
+            wgpu::BindGroupLayoutEntry { binding: 1, visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Storage { read_only: false }, has_dynamic_offset: false, min_binding_size: None }, count: None },
+            wgpu::BindGroupLayoutEntry { binding: 2, visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Storage { read_only: true },  has_dynamic_offset: false, min_binding_size: None }, count: None },
+            wgpu::BindGroupLayoutEntry { binding: 3, visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Uniform, has_dynamic_offset: false, min_binding_size: None }, count: None },
+        ],
+    });
+    let l8sq_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some("smooth_gpu link8_square_center_u8 layout"),
+        bind_group_layouts: &[&l8sq_bgl],
+        push_constant_ranges: &[],
+    });
+    let l8sq_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+        label: Some("smooth_gpu link8_square_center_u8 pipeline"),
+        layout: Some(&l8sq_layout),
+        module: &l8sq_shader,
+        entry_point: Some("main"),
+        compilation_options: Default::default(),
+        cache: None,
+    });
+
     // Preprocess (u8 ARGB) compute pipeline.
     let pre_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("smooth_gpu preprocess_u8.wgsl"),
@@ -267,6 +303,8 @@ async fn build_context() -> Result<GpuContext, Status> {
         preprocess_u8_bgl: pre_bgl,
         mode_flg_u8_pipeline: mode_pipeline,
         mode_flg_u8_bgl: mode_bgl,
+        link8_square_center_u8_pipeline: l8sq_pipeline,
+        link8_square_center_u8_bgl: l8sq_bgl,
     })
 }
 
@@ -657,6 +695,124 @@ pub unsafe extern "C" fn smooth_gpu_mode_flg_u8(
     Status::Ok as u32
 }
 
+/// Phase 3-F2B: link8_square center (4-diagonal blend + average) on GPU.
+/// Operates only on pixels where `mode_flg[i] & 0xF == 15`, leaves others
+/// untouched. Caller must pre-fill `dst[]` with `src[]` (memcpy) so the
+/// non-15 pixels carry through.
+///
+/// Outside expansion (link8_square_blend_outside) is intentionally not
+/// included — that's a row/column-sequential operation deferred to a
+/// later sub-phase.
+///
+/// # Safety
+/// All three buffers must hold at least `(rowbytes/4) * height` u32 values
+/// and not alias.
+#[no_mangle]
+pub unsafe extern "C" fn smooth_gpu_link8_square_center_u8(
+    src_ptr:      *const u32,
+    dst_ptr:      *mut u32,
+    mode_flg_ptr: *const u32,
+    rowbytes:     i32,
+    height:       i32,
+    range:        u32,
+) -> u32 {
+    if src_ptr.is_null() || dst_ptr.is_null() || mode_flg_ptr.is_null() {
+        return Status::NullPointer as u32;
+    }
+    if rowbytes <= 0 || height <= 0 { return Status::Ok as u32; }
+    let width    = (rowbytes as usize) / 4;
+    let height_u = height as usize;
+    let n        = width * height_u;
+    if n == 0 { return Status::Ok as u32; }
+
+    let guard = ctx().lock().unwrap();
+    let cx = match &*guard {
+        Ok(c)  => c,
+        Err(s) => return *s as u32,
+    };
+
+    let bytes = (n * 4) as u64;
+    let src_slice:  &[u32] = std::slice::from_raw_parts(src_ptr, n);
+    let dst_slice:  &[u32] = std::slice::from_raw_parts(dst_ptr as *const u32, n);
+    let mode_slice: &[u32] = std::slice::from_raw_parts(mode_flg_ptr, n);
+
+    let src_buf = wgpu_util_create_buffer_init(
+        &cx.device, Some("smooth_gpu link8sq src"),
+        bytemuck::cast_slice(src_slice),
+        wgpu::BufferUsages::STORAGE,
+    );
+    // Seed dst on GPU with caller's pre-filled dst (so non-15 pixels survive).
+    let dst_buf = wgpu_util_create_buffer_init(
+        &cx.device, Some("smooth_gpu link8sq dst (seed)"),
+        bytemuck::cast_slice(dst_slice),
+        wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
+    );
+    let mode_buf = wgpu_util_create_buffer_init(
+        &cx.device, Some("smooth_gpu link8sq mode_flg"),
+        bytemuck::cast_slice(mode_slice),
+        wgpu::BufferUsages::STORAGE,
+    );
+
+    #[repr(C)]
+    #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+    struct Params { width: u32, height: u32, range: u32, _pad: u32 }
+    let params = Params { width: width as u32, height: height as u32, range, _pad: 0 };
+    let params_buf = wgpu_util_create_buffer_init(
+        &cx.device, Some("smooth_gpu link8sq params"),
+        bytemuck::bytes_of(&params),
+        wgpu::BufferUsages::UNIFORM,
+    );
+
+    let read_buf = cx.device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("smooth_gpu link8sq readback"),
+        size: bytes,
+        usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+        mapped_at_creation: false,
+    });
+
+    let bg = cx.device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("smooth_gpu link8sq bg"),
+        layout: &cx.link8_square_center_u8_bgl,
+        entries: &[
+            wgpu::BindGroupEntry { binding: 0, resource: src_buf.as_entire_binding()    },
+            wgpu::BindGroupEntry { binding: 1, resource: dst_buf.as_entire_binding()    },
+            wgpu::BindGroupEntry { binding: 2, resource: mode_buf.as_entire_binding()   },
+            wgpu::BindGroupEntry { binding: 3, resource: params_buf.as_entire_binding() },
+        ],
+    });
+
+    let mut enc = cx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+        label: Some("smooth_gpu link8sq enc"),
+    });
+    {
+        let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            label: Some("smooth_gpu link8sq pass"),
+            timestamp_writes: None,
+        });
+        pass.set_pipeline(&cx.link8_square_center_u8_pipeline);
+        pass.set_bind_group(0, &bg, &[]);
+        let wx = ((width as u32) + 7) / 8;
+        let wy = ((height as u32) + 7) / 8;
+        pass.dispatch_workgroups(wx, wy, 1);
+    }
+    enc.copy_buffer_to_buffer(&dst_buf, 0, &read_buf, 0, bytes);
+    cx.queue.submit(Some(enc.finish()));
+
+    let slice = read_buf.slice(..);
+    let (tx, rx) = std::sync::mpsc::channel();
+    slice.map_async(wgpu::MapMode::Read, move |r| { let _ = tx.send(r); });
+    cx.device.poll(wgpu::Maintain::Wait);
+    if rx.recv().is_err() { return Status::DispatchFailed as u32; }
+
+    let view = slice.get_mapped_range();
+    let out: &mut [u32] = std::slice::from_raw_parts_mut(dst_ptr, n);
+    out.copy_from_slice(bytemuck::cast_slice(&view));
+    drop(view);
+    read_buf.unmap();
+
+    Status::Ok as u32
+}
+
 // Tiny shim around wgpu::util::DeviceExt::create_buffer_init, kept inside the
 // crate so we don't pull in `wgpu::util::DeviceExt` at every call site.
 fn wgpu_util_create_buffer_init(
@@ -674,8 +830,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn version_packs_zero_four() {
-        assert_eq!(smooth_gpu_version(), 0x0000_0004);
+    fn version_packs_zero_five() {
+        assert_eq!(smooth_gpu_version(), 0x0000_0005);
     }
 
     #[test]
@@ -902,6 +1058,128 @@ mod tests {
                 if cpu[k] != gpu[k] {
                     panic!("mode_flg differs at {k} (range={range}): cpu={:#x} gpu={:#x}",
                            cpu[k], gpu[k]);
+                }
+            }
+        }
+    }
+
+    // CPU reference for link8_square center handler.
+    // Source of truth: smooth-ae/rust/smooth_core/src/link8.rs link8_square_execute
+    // (lines 416-446). Outside expansion intentionally omitted for byte-equality
+    // with the GPU kernel which also omits it.
+    fn cpu_link8_square_center_reference(
+        src: &[u32], dst: &mut [u32], mode_flg: &[u32],
+        width: usize, height: usize, range: u32,
+    ) {
+        let unpack = |p: u32| [p & 0xFF, (p >> 8) & 0xFF, (p >> 16) & 0xFF, (p >> 24) & 0xFF];
+        let pack = |c: [u32; 4]| (c[0] & 0xFF) | ((c[1] & 0xFF) << 8) | ((c[2] & 0xFF) << 16) | ((c[3] & 0xFF) << 24);
+        let delta_sum = |a: u32, b: u32| -> u32 {
+            let aa = unpack(a); let bb = unpack(b);
+            let d = |x: u32, y: u32| if x > y { x - y } else { y - x };
+            d(aa[0], bb[0]) + d(aa[1], bb[1]) + d(aa[2], bb[2]) + d(aa[3], bb[3])
+        };
+        let blend_half = |target: u32, refp: u32| -> u32 {
+            let max_v: u32 = 0xFF;
+            let a_v: u32 = 0x7F;
+            let r_v: u32 = 0x80;
+            let t = unpack(target); let r = unpack(refp);
+            let tp_a = t[0]; let rp_a = r[0];
+            let mut out = [0u32; 4];
+            if tp_a == max_v && rp_a == max_v {
+                out[0] = max_v;
+                out[1] = (t[1] * a_v + r[1] * r_v) / max_v;
+                out[2] = (t[2] * a_v + r[2] * r_v) / max_v;
+                out[3] = (t[3] * a_v + r[3] * r_v) / max_v;
+            } else if tp_a == 0 {
+                out[0] = (tp_a * a_v + rp_a * r_v) / max_v;
+                out[1] = r[1]; out[2] = r[2]; out[3] = r[3];
+            } else if rp_a == 0 {
+                out[0] = (tp_a * a_v + rp_a * r_v) / max_v;
+                out[1] = t[1]; out[2] = t[2]; out[3] = t[3];
+            } else {
+                out[0] = (tp_a * a_v + rp_a * r_v) / max_v;
+                out[1] = (t[1] * a_v + r[1] * r_v) / max_v;
+                out[2] = (t[2] * a_v + r[2] * r_v) / max_v;
+                out[3] = (t[3] * a_v + r[3] * r_v) / max_v;
+            }
+            pack(out)
+        };
+
+        for j in 1..height.saturating_sub(1) {
+            for i in 1..width.saturating_sub(1) {
+                let idx = j * width + i;
+                if (mode_flg[idx] & 0xF) != 15 { continue; }
+                let p_self = src[idx];
+                let neighbours = [
+                    src[idx - width - 1],   // TL
+                    src[idx - width + 1],   // TR
+                    src[idx + width + 1],   // BR
+                    src[idx + width - 1],   // BL
+                ];
+                let mut sum = [0u32; 4];
+                for k in 0..4 {
+                    let temp = if delta_sum(p_self, neighbours[k]) <= range {
+                        p_self
+                    } else {
+                        blend_half(p_self, neighbours[k])
+                    };
+                    let u = unpack(temp);
+                    sum[0] += u[0]; sum[1] += u[1]; sum[2] += u[2]; sum[3] += u[3];
+                }
+                let avg = [sum[0] >> 2, sum[1] >> 2, sum[2] >> 2, sum[3] >> 2];
+                dst[idx] = pack(avg);
+            }
+        }
+    }
+
+    /// link8_square_center kernel byte-identical to CPU reference on a grid
+    /// of solid-coloured 5x5 tiles separated by 1-pixel gutters of a
+    /// different colour. Many pixels in such an image have mode_flg == 15
+    /// (all 4 neighbours differ), exercising the kernel.
+    #[test]
+    fn link8_square_center_u8_matches_cpu_reference() {
+        if std::env::var("SMOOTH_GPU_SKIP_INIT_TEST").is_ok() { return; }
+        let w = 64usize; let h = 32usize;
+        // Random-ish content so blend_half hits its mixed-alpha branches too.
+        let mut img: Vec<u32> = Vec::with_capacity(w * h);
+        for j in 0..h {
+            for i in 0..w {
+                let r = ((i * 37 + j * 11) & 0xFF) as u8;
+                let g = ((i * 13 + j * 41) & 0xFF) as u8;
+                let b = ((i * 7  + j * 59) & 0xFF) as u8;
+                let a = if (i + j) % 5 == 0 { 0u8 } else { 0xFFu8 };
+                img.push(pack_argb(a, r, g, b));
+            }
+        }
+        for &range in &[10u32, 100u32, 500u32] {
+            let mut mode_flg = vec![0u32; w * h];
+            // Use the GPU kernel for the mode_flg input (already byte-identical
+            // to CPU per F-2A; this also exercises the chain).
+            let st_m = unsafe {
+                smooth_gpu_mode_flg_u8(
+                    img.as_ptr(), mode_flg.as_mut_ptr(),
+                    (w * 4) as i32, h as i32, range,
+                )
+            };
+            assert_eq!(st_m, Status::Ok as u32);
+
+            let mut dst_cpu: Vec<u32> = img.clone();
+            cpu_link8_square_center_reference(&img, &mut dst_cpu, &mode_flg, w, h, range);
+
+            let mut dst_gpu: Vec<u32> = img.clone();
+            let st_g = unsafe {
+                smooth_gpu_link8_square_center_u8(
+                    img.as_ptr(),
+                    dst_gpu.as_mut_ptr(),
+                    mode_flg.as_ptr(),
+                    (w * 4) as i32, h as i32, range,
+                )
+            };
+            assert_eq!(st_g, Status::Ok as u32, "range={range}");
+            for k in 0..(w * h) {
+                if dst_cpu[k] != dst_gpu[k] {
+                    panic!("link8_square_center pixel {k} differs (range={range}): cpu=0x{:08X} gpu=0x{:08X} src=0x{:08X} mode_flg={:#x}",
+                           dst_cpu[k], dst_gpu[k], img[k], mode_flg[k]);
                 }
             }
         }
