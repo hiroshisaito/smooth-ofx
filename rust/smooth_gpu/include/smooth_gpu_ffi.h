@@ -103,6 +103,25 @@ uint32_t smooth_gpu_preprocess_u8(
     int32_t           is_white_trans,
     smooth_gpu_bbox_t *bbox_out);
 
+/* Phase F-2A: per-pixel mode_flg detection on GPU.
+ *
+ * For each interior pixel computes the 4-bit mode_flg used by
+ * smooth_core::process_row_range as the dispatch key:
+ *   bit 0 = right neighbour differs (delta_sum > range)
+ *   bit 1 = top neighbour differs
+ *   bit 2 = bottom neighbour differs
+ *   bit 3 = left neighbour differs
+ *
+ * Border pixels (row 0 / row height-1 / col 0 / col width-1) get
+ * mode_flg = 0, matching the smooth_core scan window's 1-pixel inward
+ * clamp. Output is u32-per-pixel with mode_flg in the low 4 bits. */
+uint32_t smooth_gpu_mode_flg_u8(
+    const uint32_t *src_ptr,
+    uint32_t       *mode_out,
+    int32_t         rowbytes,
+    int32_t         height,
+    uint32_t        range);
+
 #ifdef __cplusplus
 }
 #endif

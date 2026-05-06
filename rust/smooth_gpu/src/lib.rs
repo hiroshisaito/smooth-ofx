@@ -23,7 +23,7 @@ use std::sync::{Mutex, OnceLock};
 /// revision. Bump the lower 16 bits whenever any FFI struct changes layout.
 #[no_mangle]
 pub extern "C" fn smooth_gpu_version() -> u32 {
-    0x0000_0003 // bumped: smooth_gpu_preprocess_u8 added
+    0x0000_0004 // bumped: smooth_gpu_mode_flg_u8 added
 }
 
 /// Human-readable build identity (crate version + git short sha + dirty).
@@ -72,6 +72,10 @@ struct GpuContext {
     // Preprocess (Phase 3-F1) for u8 ARGB pixels.
     preprocess_u8_pipeline: wgpu::ComputePipeline,
     preprocess_u8_bgl:      wgpu::BindGroupLayout,
+
+    // mode_flg detection (Phase 3-F2A) for u8 ARGB pixels.
+    mode_flg_u8_pipeline: wgpu::ComputePipeline,
+    mode_flg_u8_bgl:      wgpu::BindGroupLayout,
 }
 
 static CTX: OnceLock<Mutex<Result<GpuContext, Status>>> = OnceLock::new();
@@ -149,6 +153,56 @@ async fn build_context() -> Result<GpuContext, Status> {
         cache: None,
     });
 
+    // mode_flg detection (u8 ARGB) compute pipeline (Phase 3-F2A).
+    // Same bgl shape as preprocess (3 bindings: src ro, mode_out rw, params)
+    // so we declare it inline. Borrows the same pixel ARGB packing convention.
+    let mode_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some("smooth_gpu mode_flg_u8.wgsl"),
+        source: wgpu::ShaderSource::Wgsl(include_str!("mode_flg_u8.wgsl").into()),
+    });
+    let mode_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: Some("smooth_gpu mode_flg_u8 bgl"),
+        entries: &[
+            wgpu::BindGroupLayoutEntry {
+                binding: 0, visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: true },
+                    has_dynamic_offset: false, min_binding_size: None,
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 1, visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: false },
+                    has_dynamic_offset: false, min_binding_size: None,
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 2, visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false, min_binding_size: None,
+                },
+                count: None,
+            },
+        ],
+    });
+    let mode_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some("smooth_gpu mode_flg_u8 layout"),
+        bind_group_layouts: &[&mode_bgl],
+        push_constant_ranges: &[],
+    });
+    let mode_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+        label: Some("smooth_gpu mode_flg_u8 pipeline"),
+        layout: Some(&mode_layout),
+        module: &mode_shader,
+        entry_point: Some("main"),
+        compilation_options: Default::default(),
+        cache: None,
+    });
+
     // Preprocess (u8 ARGB) compute pipeline.
     let pre_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("smooth_gpu preprocess_u8.wgsl"),
@@ -211,6 +265,8 @@ async fn build_context() -> Result<GpuContext, Status> {
         passthrough_bgl: bgl,
         preprocess_u8_pipeline: pre_pipeline,
         preprocess_u8_bgl: pre_bgl,
+        mode_flg_u8_pipeline: mode_pipeline,
+        mode_flg_u8_bgl: mode_bgl,
     })
 }
 
@@ -490,6 +546,117 @@ pub unsafe extern "C" fn smooth_gpu_preprocess_u8(
     Status::Ok as u32
 }
 
+/// Phase 3-F2A: per-pixel mode_flg detection on GPU.
+/// Writes a u32 per pixel into `mode_out`, with the 4-bit mode_flg in the
+/// low bits (matches smooth_core::process_row_range's pixel-level dispatch
+/// key). Reads from `src_ptr`. Border pixels (the 1-pixel edge) get
+/// mode_flg = 0, mirroring the CPU side's extent inward clamp.
+///
+/// `rowbytes` must equal `width * 4` (tight buffer). `range` is the same
+/// integer threshold passed via smooth_core_process_row_range_u8.
+///
+/// # Safety
+/// `src_ptr` must point to at least `(rowbytes/4) * height` u32 values.
+/// `mode_out` must point to at least the same number of writable u32 slots.
+#[no_mangle]
+pub unsafe extern "C" fn smooth_gpu_mode_flg_u8(
+    src_ptr:  *const u32,
+    mode_out: *mut u32,
+    rowbytes: i32,
+    height:   i32,
+    range:    u32,
+) -> u32 {
+    if src_ptr.is_null() || mode_out.is_null() {
+        return Status::NullPointer as u32;
+    }
+    if rowbytes <= 0 || height <= 0 {
+        return Status::Ok as u32;
+    }
+    let width  = (rowbytes as usize) / 4;
+    let height_u = height as usize;
+    let n = width * height_u;
+    if n == 0 { return Status::Ok as u32; }
+
+    let guard = ctx().lock().unwrap();
+    let cx = match &*guard {
+        Ok(c)  => c,
+        Err(s) => return *s as u32,
+    };
+
+    let bytes = (n * 4) as u64;
+    let src_slice: &[u32] = std::slice::from_raw_parts(src_ptr, n);
+
+    let src_buf = wgpu_util_create_buffer_init(
+        &cx.device, Some("smooth_gpu mode_flg_u8 src"),
+        bytemuck::cast_slice(src_slice),
+        wgpu::BufferUsages::STORAGE,
+    );
+    let mode_buf = cx.device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("smooth_gpu mode_flg_u8 mode"),
+        size: bytes,
+        usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
+        mapped_at_creation: false,
+    });
+
+    #[repr(C)]
+    #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+    struct Params { width: u32, height: u32, range: u32, _pad: u32 }
+    let params = Params { width: width as u32, height: height as u32, range, _pad: 0 };
+    let params_buf = wgpu_util_create_buffer_init(
+        &cx.device, Some("smooth_gpu mode_flg_u8 params"),
+        bytemuck::bytes_of(&params),
+        wgpu::BufferUsages::UNIFORM,
+    );
+
+    let read_buf = cx.device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("smooth_gpu mode_flg_u8 readback"),
+        size: bytes,
+        usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+        mapped_at_creation: false,
+    });
+
+    let bg = cx.device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("smooth_gpu mode_flg_u8 bg"),
+        layout: &cx.mode_flg_u8_bgl,
+        entries: &[
+            wgpu::BindGroupEntry { binding: 0, resource: src_buf.as_entire_binding()    },
+            wgpu::BindGroupEntry { binding: 1, resource: mode_buf.as_entire_binding()   },
+            wgpu::BindGroupEntry { binding: 2, resource: params_buf.as_entire_binding() },
+        ],
+    });
+
+    let mut enc = cx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+        label: Some("smooth_gpu mode_flg_u8 enc"),
+    });
+    {
+        let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            label: Some("smooth_gpu mode_flg_u8 pass"),
+            timestamp_writes: None,
+        });
+        pass.set_pipeline(&cx.mode_flg_u8_pipeline);
+        pass.set_bind_group(0, &bg, &[]);
+        let wx = ((width as u32) + 7) / 8;
+        let wy = ((height as u32) + 7) / 8;
+        pass.dispatch_workgroups(wx, wy, 1);
+    }
+    enc.copy_buffer_to_buffer(&mode_buf, 0, &read_buf, 0, bytes);
+    cx.queue.submit(Some(enc.finish()));
+
+    let slice = read_buf.slice(..);
+    let (tx, rx) = std::sync::mpsc::channel();
+    slice.map_async(wgpu::MapMode::Read, move |r| { let _ = tx.send(r); });
+    cx.device.poll(wgpu::Maintain::Wait);
+    if rx.recv().is_err() { return Status::DispatchFailed as u32; }
+
+    let view = slice.get_mapped_range();
+    let out: &mut [u32] = std::slice::from_raw_parts_mut(mode_out, n);
+    out.copy_from_slice(bytemuck::cast_slice(&view));
+    drop(view);
+    read_buf.unmap();
+
+    Status::Ok as u32
+}
+
 // Tiny shim around wgpu::util::DeviceExt::create_buffer_init, kept inside the
 // crate so we don't pull in `wgpu::util::DeviceExt` at every call site.
 fn wgpu_util_create_buffer_init(
@@ -507,8 +674,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn version_packs_zero_three() {
-        assert_eq!(smooth_gpu_version(), 0x0000_0003);
+    fn version_packs_zero_four() {
+        assert_eq!(smooth_gpu_version(), 0x0000_0004);
     }
 
     #[test]
@@ -659,6 +826,82 @@ mod tests {
                 if cpu_img[k] != gpu_img[k] {
                     panic!("pixel {k} differs: cpu=0x{:08X} gpu=0x{:08X} (white_trans={white_trans})",
                            cpu_img[k], gpu_img[k]);
+                }
+            }
+        }
+    }
+
+    // CPU reference for mode_flg_u8 (mirrors smooth_core::process_row_range
+    // up to the 4-bit mode_flg detection — it does not run the corner
+    // handlers). Source of truth: smooth-ae/rust/smooth_core/src/{compare,
+    // process}.rs.
+    fn cpu_mode_flg_u8_reference(
+        src: &[u32], width: usize, height: usize, range: u32,
+    ) -> Vec<u32> {
+        let mut out = vec![0u32; width * height];
+        let delta_sum = |a: u32, b: u32| -> u32 {
+            let unpack = |p: u32| -> [u32; 4] {
+                [p & 0xFF, (p >> 8) & 0xFF, (p >> 16) & 0xFF, (p >> 24) & 0xFF]
+            };
+            let aa = unpack(a); let bb = unpack(b);
+            let d = |x: u32, y: u32| if x > y { x - y } else { y - x };
+            d(aa[0], bb[0]) + d(aa[1], bb[1]) + d(aa[2], bb[2]) + d(aa[3], bb[3])
+        };
+        let cmp = |a: u32, b: u32| delta_sum(a, b) > range;
+        for j in 1..height.saturating_sub(1) {
+            for i in 1..width.saturating_sub(1) {
+                let idx = j * width + i;
+                let p_self  = src[idx];
+                let p_right = src[idx + 1];
+                if p_self != p_right {
+                    let p_left = src[idx - 1];
+                    let p_top  = src[idx - width];
+                    let p_bot  = src[idx + width];
+                    let mut m = 0u32;
+                    if cmp(p_self, p_right) { m |= 1 << 0; }
+                    if cmp(p_self, p_top)   { m |= 1 << 1; }
+                    if cmp(p_self, p_bot)   { m |= 1 << 2; }
+                    if cmp(p_self, p_left)  { m |= 1 << 3; }
+                    out[idx] = m;
+                }
+            }
+        }
+        out
+    }
+
+    /// Compare GPU mode_flg detection to the CPU reference on a deterministic
+    /// 64x32 image with both contiguous regions and sharp transitions.
+    #[test]
+    fn mode_flg_u8_matches_cpu_reference() {
+        if std::env::var("SMOOTH_GPU_SKIP_INIT_TEST").is_ok() { return; }
+        let w = 64usize; let h = 32usize;
+        // Diagonal stripes: produces non-trivial mode_flg around edges.
+        let mut img: Vec<u32> = Vec::with_capacity(w * h);
+        for j in 0..h {
+            for i in 0..w {
+                let step = (i + j) / 4;
+                let p = if step % 2 == 0 {
+                    pack_argb(0xFF, 0x00, 0x00, 0x00)
+                } else {
+                    pack_argb(0xFF, 0xFF, 0xFF, 0xFF)
+                };
+                img.push(p);
+            }
+        }
+        for &range in &[0u32, 10u32, 100u32, 4080u32] {
+            let cpu = cpu_mode_flg_u8_reference(&img, w, h, range);
+            let mut gpu = vec![0u32; w * h];
+            let st = unsafe {
+                smooth_gpu_mode_flg_u8(
+                    img.as_ptr(), gpu.as_mut_ptr(),
+                    (w * 4) as i32, h as i32, range,
+                )
+            };
+            assert_eq!(st, Status::Ok as u32, "range={range} status={st}");
+            for k in 0..(w * h) {
+                if cpu[k] != gpu[k] {
+                    panic!("mode_flg differs at {k} (range={range}): cpu={:#x} gpu={:#x}",
+                           cpu[k], gpu[k]);
                 }
             }
         }
