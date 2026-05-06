@@ -863,10 +863,38 @@ int main(int argc, char **argv)
                         label, benchW, benchH, iters, minv, median, mean, maxv2, mp_per_s);
         };
 
-        std::printf("[host-bench] running %dx%d x %d iters\n", benchW, benchH, iters);
-        run_bench(" 8bpc", OfxRGBAColourB{}, kOfxBitDepthByte,  255.0);
-        run_bench(" 16bpc", OfxRGBAColourS{}, kOfxBitDepthShort, 65535.0);
-        run_bench("float", OfxRGBAColourF{}, kOfxBitDepthFloat, 1.0);
+        // GPU トグル両状態を自動で測りたい場合は SMOOTH_BENCH_TOGGLE_GPU=1 を立てる。
+        // useGpu param が bundle に存在するときのみ意味があり、両状態 (ON / OFF) で
+        // 各 depth を別ラベルでベンチして並べる。
+        const bool toggleGpu = (std::getenv("SMOOTH_BENCH_TOGGLE_GPU") != nullptr);
+        auto useGpuIt = eff.params.find("useGpu");
+        const bool hasUseGpuParam = (useGpuIt != eff.params.end());
+        auto setUseGpu = [&](int v) {
+            if (!hasUseGpuParam) return;
+            prop_set_int(PROP_SET_HANDLE(useGpuIt->second->props.get()),
+                         kOfxParamPropDefault, 0, v);
+        };
+
+        std::printf("[host-bench] running %dx%d x %d iters%s\n",
+                    benchW, benchH, iters,
+                    (toggleGpu && hasUseGpuParam) ? " (GPU toggle ON/OFF)" :
+                    hasUseGpuParam ? " (useGpu=ON, default)" : "");
+
+        if (toggleGpu && hasUseGpuParam) {
+            setUseGpu(1);
+            run_bench(" 8bpc/gpu",   OfxRGBAColourB{}, kOfxBitDepthByte,  255.0);
+            run_bench(" 16bpc/gpu",  OfxRGBAColourS{}, kOfxBitDepthShort, 65535.0);
+            run_bench("float/gpu",   OfxRGBAColourF{}, kOfxBitDepthFloat, 1.0);
+            setUseGpu(0);
+            run_bench(" 8bpc/cpu",   OfxRGBAColourB{}, kOfxBitDepthByte,  255.0);
+            run_bench(" 16bpc/cpu",  OfxRGBAColourS{}, kOfxBitDepthShort, 65535.0);
+            run_bench("float/cpu",   OfxRGBAColourF{}, kOfxBitDepthFloat, 1.0);
+            setUseGpu(1); // restore default
+        } else {
+            run_bench(" 8bpc", OfxRGBAColourB{}, kOfxBitDepthByte,  255.0);
+            run_bench(" 16bpc", OfxRGBAColourS{}, kOfxBitDepthShort, 65535.0);
+            run_bench("float", OfxRGBAColourF{}, kOfxBitDepthFloat, 1.0);
+        }
     }
 
     // destroyInstance
