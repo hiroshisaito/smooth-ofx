@@ -657,7 +657,39 @@ int main(int argc, char **argv)
     //   プラグイン側 (Rust 経路 / 16bpc C++ 経路のバグ) なのかを切り分けるため。
     // ----------------------------------------------------------------------
     if (const char *diag = std::getenv("SMOOTH_DIAG")) {
-        if (std::strcmp(diag, "range") == 0) {
+        if (std::strcmp(diag, "gpu_passthrough") == 0) {
+            // Phase E: dlsym the smooth_gpu_passthrough_u32 entry from the
+            // OFX bundle and round-trip a u32 buffer. Verifies the full
+            // chain host_smoke → smooth.ofx → libsmooth_gpu.a → GPU device.
+            // Only meaningful when the bundle was built with USE_GPU_CORE=ON;
+            // dlsym returns nullptr otherwise and we skip with a clear note.
+            using PassthroughFn = uint32_t (*)(const uint32_t *, uint32_t *, std::size_t);
+            using InitFn        = uint32_t (*)(void);
+            using BuildIdFn     = const char *(*)(void);
+
+            auto pt    = (PassthroughFn) SMOOTH_DL_SYM(dll, "smooth_gpu_passthrough_u32");
+            auto init  = (InitFn)        SMOOTH_DL_SYM(dll, "smooth_gpu_init");
+            auto bid   = (BuildIdFn)     SMOOTH_DL_SYM(dll, "smooth_gpu_build_id");
+
+            if (!pt || !init) {
+                std::printf("[host-diag] [gpu_passthrough] smooth_gpu_* not exported (USE_GPU_CORE=OFF?), skipped\n");
+            } else {
+                uint32_t initStatus = init();
+                std::printf("[host-diag] [gpu_passthrough] smooth_gpu_init -> %u (build_id=%s)\n",
+                            initStatus, bid ? bid() : "?");
+                if (initStatus != 0) {
+                    std::printf("[host-diag] [gpu_passthrough] init failed, skipping passthrough test\n");
+                } else {
+                    const std::size_t N = 1024;
+                    std::vector<uint32_t> src(N), dst(N, 0);
+                    for (std::size_t i = 0; i < N; ++i) src[i] = (uint32_t)(i * 0x9E3779B1u);
+                    uint32_t st = pt(src.data(), dst.data(), N);
+                    bool eq = (src == dst);
+                    std::printf("[host-diag] [gpu_passthrough] N=%zu -> status=%u byte_identical=%s\n",
+                                N, st, eq ? "yes" : "NO");
+                }
+            }
+        } else if (std::strcmp(diag, "range") == 0) {
             // range の効力確認: 既存の 64x32 対角ストライプ画像 (smooth が確実に反応する) に
             // 対し range を 0/1/5/10/50/100 で render し、dst の intermediate ピクセル
             // (R==G==B かつ非 0 / 非 max) 数の変化を観察する。range が効いていれば
