@@ -50,11 +50,51 @@ C++-only baseline):
 `smooth_core::Pixel16` の max が AE 流の `0x8000` で異なるため、Rust 側に
 OFX flavor の 16bpc max を追加してから対応予定。
 
+### ドキュメント (Documentation)
+
+- クロスプラットフォーム ビルドガイドを新設: [BUILDING.md](BUILDING.md) /
+  [BUILDING_ja.md](BUILDING_ja.md)。macOS / Windows / Linux 各 OS の
+  ツールチェーン要件、Rust toolchain 前提、配布署名、検証手順、
+  トラブルシューティングまで網羅。README のビルド節はクイック
+  スタートに整理し、詳細は BUILDING に誘導する構成に変更。
+
+### 実験的機能: GPU プロトタイプ (`USE_GPU_CORE`、デフォルト OFF)
+
+wgpu (Metal / Vulkan / DX12) を使ったクロスプラットフォーム GPU 加速の
+プロトタイプとして `smooth_gpu` Rust crate をソースツリーに追加。
+**デフォルト OFF**、配布バイナリには含まれません。
+
+- 新 CMake オプション `USE_GPU_CORE=ON` で `rust/smooth_gpu/` をビルド
+  & リンク。`USE_RUST_CORE` とリンク時に相互排他 (両 staticlib が Rust
+  ランタイムを内蔵し重複シンボルになるため。smooth_core は staticlib
+  専用で Rust 依存として埋め込めない)。
+- WGSL kernel: `passthrough` / `preprocess` (AE + OFX 両 layout) /
+  `mode_flg` 検出 / `link8_square` 中心 handler の 4 つ、それぞれ
+  CPU 参照実装と byte-identical を `cargo test` で検証済。
+- ハイブリッドレンダー経路: `USE_GPU_CORE=ON` のとき、`smoothing<>()` は
+  8bpc preprocess を GPU で実行し、残りのアルゴリズムは C++ ベース
+  ライン経路に流す。状態は "build" ラベルに smooth_gpu の build identity
+  と並べて表示。
+- Effect Controls に **GPU トグル (boolean パラメータ、default ON)** を
+  追加。再ビルド不要で GPU/CPU preprocess を切替可能。
+- `host_smoke` に `SMOOTH_BENCH_TOGGLE_GPU=1` モードを追加、両経路を
+  side-by-side でベンチ可能。
+- **性能**: このプロトタイプは出荷経路 (`USE_RUST_CORE=ON`) より **遅い**。
+  GPU の転送オーバーヘッド (upload + dispatch + readback ≈ 5–10 ms) が
+  preprocess の節約 (1–2 ms) を上回るため。次の 2 方向への足場として
+  存在する: (i) `USE_RUST_CORE` / `USE_GPU_CORE` のリンク相互排他を
+  `smooth_core` の `rlib` 化で解消し、rayon CPU + GPU kernel を共存させる、
+  (ii) OFX 1.5 `kOfxImageEffectActionRenderGPU` 経由で zero-copy 経路
+  を実装。いずれかが解禁されるまで本番構成は
+  `USE_RUST_CORE=ON, USE_GPU_CORE=OFF` のまま。
+
 ### 注意 (Notes)
 
 - バンドルサイズが ~134 KB → ~607 KB (arm64) に増加。rayon + その
   依存 crate を staticlib として同梱したため。実行時の追加依存はなく、
-  `otool -L` は引き続き `libc++` / `libSystem` のみ。
+  `otool -L` は引き続き `libc++` / `libSystem` のみ。GPU プロトタイプ
+  ビルドはさらに ~1.3 MB 増加し、macOS では Metal / MetalKit /
+  QuartzCore / Foundation framework もリンクされる。
 - 配布 zip の名前は `smooth-1.4.0-*` → `smooth-1.6.0-*` に変更。
 
 ## 1.4.0 — 2026-04-20

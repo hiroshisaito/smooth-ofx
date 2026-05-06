@@ -49,12 +49,56 @@ to the C++-only 1.4.0 baseline:
 `smooth_core::Pixel16` uses 0x8000). Will move to Rust once the crate
 gets an OFX-flavour 16bpc max value.
 
+### Documentation
+
+- New cross-platform build guide: [BUILDING.md](BUILDING.md) /
+  [BUILDING_ja.md](BUILDING_ja.md). Covers macOS / Windows / Linux,
+  Rust toolchain prerequisites, signing, validation, and a
+  troubleshooting section. The README's build sections are reduced
+  to a quick-start that defers to BUILDING for detail.
+
+### Experimental: GPU prototype (`USE_GPU_CORE`, opt-in, off by default)
+
+A `smooth_gpu` Rust crate has been added to the source tree as a
+prototype for cross-platform GPU acceleration via wgpu (Metal /
+Vulkan / DX12). Not built by default and not part of the
+distributed binaries.
+
+- New CMake option `USE_GPU_CORE=ON` builds and links the
+  `rust/smooth_gpu/` crate. Mutually exclusive with `USE_RUST_CORE`
+  at link time (both staticlibs embed the Rust runtime; `smooth_core`
+  is `staticlib`-only so it cannot be embedded as a Rust dep).
+- WGSL kernels for `passthrough`, `preprocess` (AE + OFX byte
+  layouts), `mode_flg` detection, and `link8_square` center handler.
+  Each verified byte-identical to a CPU reference under `cargo test`.
+- Hybrid render path: when `USE_GPU_CORE=ON`, `smoothing<>()` runs
+  the 8bpc preprocess on GPU and the rest of the algorithm on the
+  C++ baseline. Status is currently surfaced in the "build" label
+  alongside the smooth_gpu build identity.
+- Runtime "GPU" boolean parameter in Effect Controls (default on)
+  to flip between GPU and CPU preprocess without rebuilding.
+- `host_smoke` gains a `SMOOTH_BENCH_TOGGLE_GPU=1` mode to compare
+  the two paths side by side.
+- **Performance**: this prototype is *slower* than the shipping
+  `USE_RUST_CORE=ON` configuration on every measured size, because
+  the GPU round-trip cost (upload + dispatch + readback ≈ 5–10 ms)
+  outweighs the 1–2 ms preprocess saves on the host's CPU. It exists
+  as the architectural seam for two follow-up directions:
+  (i) breaking the `USE_RUST_CORE` / `USE_GPU_CORE` link mutex by
+  making `smooth_core` expose `rlib` as well, allowing rayon-CPU and
+  GPU kernels to coexist; (ii) wiring OFX 1.5
+  `kOfxImageEffectActionRenderGPU` for a zero-copy GPU path. Until
+  one of those lands, the production configuration remains
+  `USE_RUST_CORE=ON, USE_GPU_CORE=OFF`.
+
 ### Notes
 
 - Bundle size grew (~134 KB -> ~607 KB on arm64) because rayon and
   its dependencies are statically linked into the plugin. No new
   runtime dependencies; `otool -L` still shows only `libc++` /
-  `libSystem`.
+  `libSystem`. The optional GPU prototype build adds a further
+  ~1.3 MB and pulls in Metal / MetalKit / QuartzCore / Foundation
+  on macOS.
 - Distribution zips renamed from `smooth-1.4.0-*` to `smooth-1.6.0-*`.
 
 ## 1.4.0 — 2026-04-20
