@@ -1,0 +1,25 @@
+[package]
+name    = "smooth_gpu"
+version = "0.0.1"
+edition = "2021"
+description = "GPU acceleration for the smooth OFX plugin via wgpu (Metal/Vulkan/D3D12)"
+
+[lib]
+name       = "smooth_gpu"
+crate-type = ["staticlib"]
+
+[dependencies]
+# wgpu: cross-platform GPU API. We pin a recent stable line so behavior is
+# predictable across the macOS dev path and the Windows/Linux release builds.
+# Use default features to pick up Metal (mac), DX12 (win), Vulkan (linux/win)
+# automatically. We can trim later via per-target [target.'cfg(...)'.dependencies]
+# if binary size becomes a concern.
+wgpu        = "23"
+pollster    = "0.4"
+bytemuck    = { version = "1", features = ["derive"] }
+
+[profile.release]
+opt-level     = 3
+lto           = true
+codegen-units = 1
+panic         = "abort"

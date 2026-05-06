@@ -329,7 +329,46 @@ that `rustup target list --installed` includes both
 Architecture mismatch between the harness and the plugin. Build both
 with the same `CMAKE_OSX_ARCHITECTURES`.
 
-## 9. Cross-platform CI sketch (future work)
+## 9. GPU core (`smooth_gpu`) — cross-platform notes
+
+The GPU acceleration path is being prototyped via the `wgpu` crate
+(`rust/smooth_gpu/`), still in Phase A scaffolding as of 2026-05-06.
+The crate is **not yet wired into the OFX build**; `USE_RUST_CORE`
+remains the only Rust path that ships in 1.6.0. These notes capture
+things to watch when the Windows / Linux machines pick up the work:
+
+- **Backends selected at build time**: wgpu 23 default features pull in
+  Metal (macOS), DX12 (Windows), and Vulkan (Linux/Windows) backends
+  into one staticlib. Selection happens at runtime via
+  `wgpu::Backends::PRIMARY`.
+- **Static lib size**: `libsmooth_gpu.a` measures ≈ 9.3 MB on macOS
+  arm64 (vs ≈ 5.7 MB for `libsmooth_core.a`). Expect the per-arch OFX
+  bundle to grow by roughly 4–5 MB once `smooth_gpu` is linked in.
+- **Linux runtime**: the OFX bundle does **not** ship a Vulkan
+  loader/driver. The host system needs a Vulkan ICD (e.g.
+  `mesa-vulkan-drivers`, `vulkan-tools`) installed for `smooth_gpu`
+  to acquire an adapter. Document the install-time prerequisite in
+  `dist/README-linux-*.txt` when the Linux distribution path is built.
+- **Windows runtime**: DX12 is provided by the OS (10+); no extra
+  install on the user's side. wgpu can fall back to Vulkan if a
+  Vulkan driver is also present, but this should not be relied on.
+- **Rust target triples for `smooth_gpu`** match `smooth_core`'s — see
+  the table at the top of this file. CI / cross-builds need
+  `rustup target add` for each target you build on a given host.
+- **Headless CI**: `smooth_gpu`'s integration test
+  (`init_can_acquire_a_device_on_this_host`) actually spins up a GPU
+  device. On Linux runners without a usable GPU, set
+  `SMOOTH_GPU_SKIP_INIT_TEST=1` to skip it; the unit tests for
+  `smooth_gpu_version()` and `smooth_gpu_build_id()` always run.
+- **MinGW path**: same caveat as for `smooth_core` — wgpu links MSVC
+  symbols on Windows, so the MSYS2 MinGW dev path can't link
+  `smooth_gpu` either. Plan to gate it off when MSVC is not detected,
+  same way `USE_RUST_CORE` is treated.
+
+When a real algorithm kernel lands, this section will get a "GPU build
+matrix" entry; until then, treat it as advisory.
+
+## 10. Cross-platform CI sketch (future work)
 
 A minimal GitHub Actions matrix covering all three platforms:
 

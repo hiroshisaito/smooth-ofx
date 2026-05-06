@@ -32,6 +32,10 @@ CPackConfig.cmake
 CPackSourceConfig.cmake
 _deps/
 
+# Rust crate build artefacts (target/ inside any rust/* crate)
+/rust/*/target/
+/rust/*/Cargo.lock
+
 # Windows / Visual Studio
 .vs/
 *.user
