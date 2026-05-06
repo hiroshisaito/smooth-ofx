@@ -23,7 +23,7 @@ use std::sync::{Mutex, OnceLock};
 /// revision. Bump the lower 16 bits whenever any FFI struct changes layout.
 #[no_mangle]
 pub extern "C" fn smooth_gpu_version() -> u32 {
-    0x0000_0002 // bumped: passthrough entry point added
+    0x0000_0003 // bumped: smooth_gpu_preprocess_u8 added
 }
 
 /// Human-readable build identity (crate version + git short sha + dirty).
@@ -48,12 +48,30 @@ pub enum Status {
     NullPointer         = 5,
 }
 
+/// SmoothBbox layout matches smooth_core's smooth_bbox_t. We re-declare it
+/// here so the GPU path stays standalone (USE_RUST_CORE and USE_GPU_CORE
+/// are mutually exclusive at link time — see CMakeLists.txt comment).
+#[repr(C)]
+#[derive(Copy, Clone, Default, PartialEq, Eq, Debug)]
+pub struct SmoothBbox {
+    pub top:    i32,
+    pub left:   i32,
+    pub right:  i32,
+    pub bottom: i32,
+}
+
 /// Cached GPU context. One instance per process.
 struct GpuContext {
     device: wgpu::Device,
     queue:  wgpu::Queue,
+
+    // Passthrough (sanity / harness probe).
     passthrough_pipeline: wgpu::ComputePipeline,
     passthrough_bgl:      wgpu::BindGroupLayout,
+
+    // Preprocess (Phase 3-F1) for u8 ARGB pixels.
+    preprocess_u8_pipeline: wgpu::ComputePipeline,
+    preprocess_u8_bgl:      wgpu::BindGroupLayout,
 }
 
 static CTX: OnceLock<Mutex<Result<GpuContext, Status>>> = OnceLock::new();
@@ -131,10 +149,68 @@ async fn build_context() -> Result<GpuContext, Status> {
         cache: None,
     });
 
+    // Preprocess (u8 ARGB) compute pipeline.
+    let pre_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some("smooth_gpu preprocess_u8.wgsl"),
+        source: wgpu::ShaderSource::Wgsl(include_str!("preprocess_u8.wgsl").into()),
+    });
+    let pre_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: Some("smooth_gpu preprocess_u8 bgl"),
+        entries: &[
+            wgpu::BindGroupLayoutEntry {
+                binding: 0, visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: true },
+                    has_dynamic_offset: false, min_binding_size: None,
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 1, visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: false },
+                    has_dynamic_offset: false, min_binding_size: None,
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 2, visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: false },
+                    has_dynamic_offset: false, min_binding_size: None,
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 3, visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false, min_binding_size: None,
+                },
+                count: None,
+            },
+        ],
+    });
+    let pre_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some("smooth_gpu preprocess_u8 layout"),
+        bind_group_layouts: &[&pre_bgl],
+        push_constant_ranges: &[],
+    });
+    let pre_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+        label: Some("smooth_gpu preprocess_u8 pipeline"),
+        layout: Some(&pre_layout),
+        module: &pre_shader,
+        entry_point: Some("main"),
+        compilation_options: Default::default(),
+        cache: None,
+    });
+
     Ok(GpuContext {
         device, queue,
         passthrough_pipeline: pipeline,
         passthrough_bgl: bgl,
+        preprocess_u8_pipeline: pre_pipeline,
+        preprocess_u8_bgl: pre_bgl,
     })
 }
 
@@ -243,6 +319,177 @@ pub unsafe extern "C" fn smooth_gpu_passthrough_u32(
     Status::Ok as u32
 }
 
+/// Phase 3-F1: u8 (ARGB) preprocess on GPU.
+/// Round-trips an image through the preprocess kernel and writes the result
+/// to `out_ptr`. `bbox_out` receives the SmoothBbox-shaped result (matching
+/// smooth_core::pre_process semantics).
+///
+/// `src_ptr` and `out_ptr` may alias (same pointer is fine for in-place
+/// semantics from the caller's perspective; we always stage src to a GPU
+/// buffer and write out_ptr from the GPU readback).
+///
+/// `rowbytes` must equal `width * 4`; tight buffers only for now (matches the
+/// way smooth_core_preprocess_u8 is currently called from the OFX C++ side).
+///
+/// # Safety
+/// `src_ptr` must point to at least `(rowbytes/4) * height` u32 values.
+/// `out_ptr` must point to at least the same number of writable u32 slots.
+/// `bbox_out` must be a valid pointer to a SmoothBbox (16 bytes).
+#[no_mangle]
+pub unsafe extern "C" fn smooth_gpu_preprocess_u8(
+    src_ptr: *const u32,
+    out_ptr: *mut u32,
+    rowbytes: i32,
+    height: i32,
+    is_white_trans: i32,
+    bbox_out: *mut SmoothBbox,
+) -> u32 {
+    if src_ptr.is_null() || out_ptr.is_null() || bbox_out.is_null() {
+        return Status::NullPointer as u32;
+    }
+    if rowbytes <= 0 || height <= 0 {
+        // Degenerate inputs: hand back the "no pixels found" sentinel.
+        *bbox_out = SmoothBbox { top: 0, left: 0, right: 1, bottom: 1 };
+        return Status::Ok as u32;
+    }
+    let width  = (rowbytes as usize) / 4;
+    let height_u = height as usize;
+    let n = width * height_u;
+    if n == 0 {
+        *bbox_out = SmoothBbox { top: 0, left: 0, right: 1, bottom: 1 };
+        return Status::Ok as u32;
+    }
+
+    let guard = ctx().lock().unwrap();
+    let cx = match &*guard {
+        Ok(c)  => c,
+        Err(s) => return *s as u32,
+    };
+
+    let bytes = (n * 4) as u64;
+    let src_slice: &[u32] = std::slice::from_raw_parts(src_ptr, n);
+
+    let src_buf = wgpu_util_create_buffer_init(
+        &cx.device,
+        Some("smooth_gpu preprocess_u8 src"),
+        bytemuck::cast_slice(src_slice),
+        wgpu::BufferUsages::STORAGE,
+    );
+    let dst_buf = cx.device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("smooth_gpu preprocess_u8 dst"),
+        size: bytes,
+        usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
+        mapped_at_creation: false,
+    });
+
+    // bbox storage buffer seeded to {INT_MAX, INT_MAX, -1, -1}.
+    let bbox_seed: [i32; 4] = [i32::MAX, i32::MAX, -1, -1];
+    let bbox_buf = wgpu_util_create_buffer_init(
+        &cx.device,
+        Some("smooth_gpu preprocess_u8 bbox"),
+        bytemuck::cast_slice(&bbox_seed),
+        wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
+    );
+
+    // Uniform params.
+    #[repr(C)]
+    #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+    struct Params { width: u32, height: u32, is_white_trans: u32, _pad: u32 }
+    let params = Params {
+        width: width as u32,
+        height: height as u32,
+        is_white_trans: if is_white_trans != 0 { 1 } else { 0 },
+        _pad: 0,
+    };
+    let params_buf = wgpu_util_create_buffer_init(
+        &cx.device,
+        Some("smooth_gpu preprocess_u8 params"),
+        bytemuck::bytes_of(&params),
+        wgpu::BufferUsages::UNIFORM,
+    );
+
+    // Readback buffers.
+    let read_dst = cx.device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("smooth_gpu preprocess_u8 readback dst"),
+        size: bytes,
+        usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+        mapped_at_creation: false,
+    });
+    let read_bbox = cx.device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("smooth_gpu preprocess_u8 readback bbox"),
+        size: 16,
+        usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+        mapped_at_creation: false,
+    });
+
+    let bg = cx.device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("smooth_gpu preprocess_u8 bg"),
+        layout: &cx.preprocess_u8_bgl,
+        entries: &[
+            wgpu::BindGroupEntry { binding: 0, resource: src_buf.as_entire_binding() },
+            wgpu::BindGroupEntry { binding: 1, resource: dst_buf.as_entire_binding() },
+            wgpu::BindGroupEntry { binding: 2, resource: bbox_buf.as_entire_binding() },
+            wgpu::BindGroupEntry { binding: 3, resource: params_buf.as_entire_binding() },
+        ],
+    });
+
+    let mut enc = cx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+        label: Some("smooth_gpu preprocess_u8 enc"),
+    });
+    {
+        let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            label: Some("smooth_gpu preprocess_u8 pass"),
+            timestamp_writes: None,
+        });
+        pass.set_pipeline(&cx.preprocess_u8_pipeline);
+        pass.set_bind_group(0, &bg, &[]);
+        let wx = ((width as u32) + 7) / 8;
+        let wy = ((height as u32) + 7) / 8;
+        pass.dispatch_workgroups(wx, wy, 1);
+    }
+    enc.copy_buffer_to_buffer(&dst_buf,  0, &read_dst,  0, bytes);
+    enc.copy_buffer_to_buffer(&bbox_buf, 0, &read_bbox, 0, 16);
+    cx.queue.submit(Some(enc.finish()));
+
+    // Read back dst.
+    let dst_slice = read_dst.slice(..);
+    let (tx_d, rx_d) = std::sync::mpsc::channel();
+    dst_slice.map_async(wgpu::MapMode::Read, move |r| { let _ = tx_d.send(r); });
+    let bb_slice = read_bbox.slice(..);
+    let (tx_b, rx_b) = std::sync::mpsc::channel();
+    bb_slice.map_async(wgpu::MapMode::Read, move |r| { let _ = tx_b.send(r); });
+    cx.device.poll(wgpu::Maintain::Wait);
+    if rx_d.recv().is_err() || rx_b.recv().is_err() {
+        return Status::DispatchFailed as u32;
+    }
+
+    let dst_view = dst_slice.get_mapped_range();
+    let out_slice: &mut [u32] = std::slice::from_raw_parts_mut(out_ptr, n);
+    out_slice.copy_from_slice(bytemuck::cast_slice(&dst_view));
+    drop(dst_view);
+    read_dst.unmap();
+
+    let bb_view = bb_slice.get_mapped_range();
+    let bb: &[i32] = bytemuck::cast_slice(&bb_view);
+    let (top_a, left_a, right_a, bottom_a) = (bb[0], bb[1], bb[2], bb[3]);
+    drop(bb_view);
+    read_bbox.unmap();
+
+    // Project atomic-min/max raw values onto the smooth_core SmoothBbox shape.
+    let bbox = if top_a == i32::MAX {
+        SmoothBbox { top: 0, left: 0, right: 1, bottom: 1 }
+    } else {
+        SmoothBbox {
+            top: top_a, left: left_a,
+            right: right_a + 1,
+            bottom: bottom_a + 1,
+        }
+    };
+    *bbox_out = bbox;
+
+    Status::Ok as u32
+}
+
 // Tiny shim around wgpu::util::DeviceExt::create_buffer_init, kept inside the
 // crate so we don't pull in `wgpu::util::DeviceExt` at every call site.
 fn wgpu_util_create_buffer_init(
@@ -260,8 +507,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn version_packs_zero_two() {
-        assert_eq!(smooth_gpu_version(), 0x0000_0002);
+    fn version_packs_zero_three() {
+        assert_eq!(smooth_gpu_version(), 0x0000_0003);
     }
 
     #[test]
@@ -297,5 +544,143 @@ mod tests {
         };
         assert_eq!(st, Status::Ok as u32, "passthrough returned {st}");
         assert_eq!(src, dst, "GPU passthrough output differs from input");
+    }
+
+    // CPU reference port of smooth_core::pre_process for u8 ARGB.
+    // Local copy so the test stays standalone (smooth_core can't be a Rust
+    // path-dep — see Cargo.toml). Source of truth is
+    // smooth-ae/rust/smooth_core/src/preprocess.rs.
+    fn cpu_preprocess_u8_reference(
+        pixels: &mut [u32],
+        width: usize,
+        height: usize,
+        is_white_trans: bool,
+    ) -> SmoothBbox {
+        let null: u32 = 0;
+        let mut top: i32    = 0;
+        let mut left: i32   = width as i32;
+        let mut right: i32  = 0;
+        let mut bottom: i32 = 0;
+        let mut top_found  = false;
+        let mut left_found = false;
+        let mut t: usize = 0;
+
+        let is_white = |p: u32| -> bool { ((p >> 8) & 0x00FF_FFFF) == 0x00FF_FFFF };
+        let alpha_zero = |p: u32| -> bool { (p & 0xFF) == 0 };
+
+        if is_white_trans {
+            for j in 0..height {
+                if !top_found { top = j as i32; }
+                for i in 0..width {
+                    let p = pixels[t];
+                    if is_white(p) {
+                        pixels[t] = null;
+                    } else if !alpha_zero(p) {
+                        top_found = true; left_found = true;
+                        let ii = i as i32; let jj = j as i32;
+                        if left  > ii { left  = ii; }
+                        if right < ii { right = ii; }
+                        if bottom < jj { bottom = jj; }
+                    }
+                    t += 1;
+                }
+            }
+        } else {
+            for j in 0..height {
+                if !top_found { top = j as i32; }
+                for i in 0..width {
+                    let p = pixels[t];
+                    if !is_white(p) && !alpha_zero(p) {
+                        top_found = true; left_found = true;
+                        let ii = i as i32; let jj = j as i32;
+                        if left  > ii { left  = ii; }
+                        if right < ii { right = ii; }
+                        if bottom < jj { bottom = jj; }
+                    }
+                    t += 1;
+                }
+            }
+        }
+        SmoothBbox {
+            top:    if top_found  { top  } else { 0 },
+            left:   if left_found { left } else { 0 },
+            right:  right + 1,
+            bottom: bottom + 1,
+        }
+    }
+
+    fn pack_argb(a: u8, r: u8, g: u8, b: u8) -> u32 {
+        (a as u32) | ((r as u32) << 8) | ((g as u32) << 16) | ((b as u32) << 24)
+    }
+
+    /// Compare GPU preprocess output to the CPU reference on a deterministic
+    /// 64x32 image with a mix of white / transparent / coloured pixels.
+    /// Both `is_white_trans` branches must produce byte-identical buffers
+    /// AND identical SmoothBbox output.
+    #[test]
+    fn preprocess_u8_matches_cpu_reference() {
+        if std::env::var("SMOOTH_GPU_SKIP_INIT_TEST").is_ok() { return; }
+        let w = 64usize;
+        let h = 32usize;
+        let mut img: Vec<u32> = Vec::with_capacity(w * h);
+        for j in 0..h {
+            for i in 0..w {
+                let pixel = if (i + j) % 7 == 0 {
+                    pack_argb(0xFF, 0xFF, 0xFF, 0xFF)              // white
+                } else if (i + j) % 5 == 0 {
+                    pack_argb(0x00, 0x00, 0x00, 0x00)              // transparent
+                } else {
+                    pack_argb(0xFF, (i as u8) & 0xFF, (j as u8) & 0xFF, 0x40)
+                };
+                img.push(pixel);
+            }
+        }
+
+        for &white_trans in &[false, true] {
+            let mut cpu_img = img.clone();
+            let cpu_bb = cpu_preprocess_u8_reference(&mut cpu_img, w, h, white_trans);
+
+            let mut gpu_img = img.clone();
+            let mut gpu_bb = SmoothBbox::default();
+            let st = unsafe {
+                smooth_gpu_preprocess_u8(
+                    img.as_ptr(),
+                    gpu_img.as_mut_ptr(),
+                    (w * 4) as i32,
+                    h as i32,
+                    if white_trans { 1 } else { 0 },
+                    &mut gpu_bb,
+                )
+            };
+            assert_eq!(st, Status::Ok as u32, "white_trans={white_trans} status={st}");
+            assert_eq!(cpu_bb, gpu_bb, "bbox mismatch (white_trans={white_trans})");
+            // Find first divergence to give a useful failure message.
+            for k in 0..(w * h) {
+                if cpu_img[k] != gpu_img[k] {
+                    panic!("pixel {k} differs: cpu=0x{:08X} gpu=0x{:08X} (white_trans={white_trans})",
+                           cpu_img[k], gpu_img[k]);
+                }
+            }
+        }
+    }
+
+    /// All-transparent image must yield SmoothBbox {0, 0, 1, 1}.
+    #[test]
+    fn preprocess_u8_all_transparent() {
+        if std::env::var("SMOOTH_GPU_SKIP_INIT_TEST").is_ok() { return; }
+        let w = 4usize; let h = 3usize;
+        let img: Vec<u32> = vec![0; w * h];
+        let mut out: Vec<u32> = vec![0xDEADBEEFu32; w * h];
+        let mut bb = SmoothBbox::default();
+        let st = unsafe {
+            smooth_gpu_preprocess_u8(
+                img.as_ptr(), out.as_mut_ptr(),
+                (w * 4) as i32, h as i32, 0, &mut bb,
+            )
+        };
+        assert_eq!(st, Status::Ok as u32);
+        assert_eq!(bb, SmoothBbox { top: 0, left: 0, right: 1, bottom: 1 });
+        // Output must be all-transparent (matches CPU semantics: src copied through).
+        assert!(out.iter().all(|&p| p == 0));
     }
 }

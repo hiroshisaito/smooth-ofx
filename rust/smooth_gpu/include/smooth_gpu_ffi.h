@@ -69,6 +69,40 @@ uint32_t smooth_gpu_init(void);
  * entry points (preprocess + process_row_range) will land in Phase F. */
 uint32_t smooth_gpu_passthrough_u32(const uint32_t *src, uint32_t *dst, size_t len);
 
+/* SmoothBbox shape: matches smooth_core's smooth_bbox_t. */
+typedef struct {
+    int32_t top;
+    int32_t left;
+    int32_t right;
+    int32_t bottom;
+} smooth_gpu_bbox_t;
+
+/* Phase F-1: u8 (ARGB) preprocess on GPU.
+ *
+ * Reads `src_ptr[0..(rowbytes/4) * height]`, writes `out_ptr[0..same]`, and
+ * fills `*bbox_out` with the SmoothBbox-shaped result.
+ *
+ *   if is_white_trans != 0:
+ *     - white-key (RGB == 0xFFFFFF) pixels become null (RGBA = 0)
+ *     - alpha == 0 pixels are skipped (out is unchanged from src)
+ *     - other pixels are passed through and contribute to bbox
+ *   else:
+ *     - all pixels are passed through unchanged
+ *     - bbox spans only non-white, non-zero-alpha pixels
+ *
+ * `rowbytes` must equal `width * 4` — tight buffers only for now (matches
+ * how smooth_core_preprocess_u8 is currently called from the OFX C++ side).
+ *
+ * src_ptr and out_ptr may alias (same pointer is fine; we always stage src
+ * to a GPU buffer and write out_ptr from the GPU readback). */
+uint32_t smooth_gpu_preprocess_u8(
+    const uint32_t   *src_ptr,
+    uint32_t         *out_ptr,
+    int32_t           rowbytes,
+    int32_t           height,
+    int32_t           is_white_trans,
+    smooth_gpu_bbox_t *bbox_out);
+
 #ifdef __cplusplus
 }
 #endif
