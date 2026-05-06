@@ -37,6 +37,12 @@ extern "C" {
 }
 #endif
 
+#ifdef SMOOTH_OFX_USE_GPU_CORE
+extern "C" {
+#include "smooth_gpu_ffi.h"
+}
+#endif
+
 //---------------------------------------------------------------------------//
 // ホスト情報
 //---------------------------------------------------------------------------//
@@ -591,17 +597,35 @@ describeInContext(OfxImageEffectHandle effect, OfxPropertySetHandle /*inArgs*/)
     // 「SingleLine + Enabled=0 (disabled)」という他 OFX プラグインでも一般的な
     // パターンに切り替え、通常の text widget をグレーアウト表示で読み取り専用にする。
     {
-        char buildIdStr[256];
+        char buildIdStr[320];
+        char *cur = buildIdStr;
+        char *end = buildIdStr + sizeof(buildIdStr);
+        int n;
 #ifdef SMOOTH_OFX_USE_RUST_CORE
         const char *coreId = smooth_core_build_id();
-        std::snprintf(buildIdStr, sizeof(buildIdStr),
-                      "%s+%s / rust core %s",
-                      SMOOTH_OFX_VERSION, SMOOTH_OFX_GIT_SHA,
-                      (coreId && *coreId) ? coreId : "?");
+        n = std::snprintf(cur, end - cur, "%s+%s / rust core %s",
+                          SMOOTH_OFX_VERSION, SMOOTH_OFX_GIT_SHA,
+                          (coreId && *coreId) ? coreId : "?");
 #else
-        std::snprintf(buildIdStr, sizeof(buildIdStr),
-                      "%s+%s / cpp core",
-                      SMOOTH_OFX_VERSION, SMOOTH_OFX_GIT_SHA);
+        n = std::snprintf(cur, end - cur, "%s+%s / cpp core",
+                          SMOOTH_OFX_VERSION, SMOOTH_OFX_GIT_SHA);
+#endif
+        if (n > 0 && cur + n < end) cur += n;
+
+#ifdef SMOOTH_OFX_USE_GPU_CORE
+        // smooth_gpu_init() がここで呼ばれることで staticlib のシンボルが retain
+        // される (DCE 解除)。GPU を実際にレンダ経路で使うのは Phase F 以降。
+        // ここでは init 結果と build id を Inspector の build ラベルに出すだけ。
+        const uint32_t gpuStatus = smooth_gpu_init();
+        const char *gpuId = smooth_gpu_build_id();
+        const char *gpuStatusStr =
+            (gpuStatus == SMOOTH_GPU_STATUS_OK)                 ? "ok"        :
+            (gpuStatus == SMOOTH_GPU_STATUS_NO_ADAPTER)         ? "no-adapter":
+            (gpuStatus == SMOOTH_GPU_STATUS_DEVICE_CREATE_FAIL) ? "no-device" :
+                                                                  "fail";
+        n = std::snprintf(cur, end - cur, " | gpu %s %s",
+                          gpuStatusStr, (gpuId && *gpuId) ? gpuId : "?");
+        if (n > 0 && cur + n < end) cur += n;
 #endif
         gParamHost->paramDefine(paramSet, kOfxParamTypeString, kParamBuildInfo, &props);
         gPropHost->propSetString(props, kOfxParamPropStringMode, 0, kOfxParamStringIsSingleLine);

@@ -18,6 +18,14 @@ wgpu        = "23"
 pollster    = "0.4"
 bytemuck    = { version = "1", features = ["derive"] }
 
+# Note: smooth_core is intentionally NOT a dependency. smooth_core declares
+# `crate-type = ["staticlib"]` only (no rlib), which means it cannot be used
+# as a regular Rust dependency. Linking both libsmooth_core.a and
+# libsmooth_gpu.a side-by-side fails at the C++ link step with duplicate
+# Rust-runtime symbols (`std::panicking::EMPTY_PANIC`, `_rust_eh_personality`).
+# CMake therefore enforces USE_RUST_CORE and USE_GPU_CORE as mutually
+# exclusive — when USE_GPU_CORE is ON the CPU fallback is the C++ baseline.
+
 [profile.release]
 opt-level     = 3
 lto           = true

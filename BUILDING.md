@@ -364,6 +364,17 @@ things to watch when the Windows / Linux machines pick up the work:
   symbols on Windows, so the MSYS2 MinGW dev path can't link
   `smooth_gpu` either. Plan to gate it off when MSVC is not detected,
   same way `USE_RUST_CORE` is treated.
+- **`USE_RUST_CORE` and `USE_GPU_CORE` are mutually exclusive**:
+  both staticlibs embed the Rust runtime (`std::panicking::EMPTY_PANIC`,
+  `_rust_eh_personality`, …). Linking them side-by-side fails at the
+  C++ link step with duplicate-symbol errors. CMake refuses the
+  combination with `FATAL_ERROR`. `smooth_core`'s `crate-type` is
+  `staticlib`-only, so it cannot be embedded as a Rust path-dep into
+  `smooth_gpu` to dedup the runtime — modifying that would change
+  the AE-side submodule. Until that lands upstream the runtime story
+  for `USE_GPU_CORE=ON` is: GPU path on the new prototype, CPU
+  fallback through the existing C++ implementations (the same code
+  that ships when `USE_RUST_CORE=OFF`).
 
 When a real algorithm kernel lands, this section will get a "GPU build
 matrix" entry; until then, treat it as advisory.

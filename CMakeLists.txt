@@ -148,6 +148,22 @@ endif()
 # ビルドできる (cargo が見つからない場合は configure 時に FATAL_ERROR で停止)。
 option(USE_RUST_CORE "Build & link smooth_core Rust crate (default ON since 1.6.0)" ON)
 
+# USE_RUST_CORE と USE_GPU_CORE は相互排他: 両方を ON にすると、libsmooth_core.a と
+# libsmooth_gpu.a の両方に Rust ランタイム (panic handler / eh_personality 等) が
+# 重複リンクされ、macOS の modern linker (ld-prime) が duplicate symbols エラーで
+# 落ちる。smooth_core は `crate-type = ["staticlib"]` 専用なので Rust から path-dep
+# できず、上位 wrapper crate での dedup も不可。よって設定としてどちらか一方を
+# 選ぶ運用にする。
+if(USE_RUST_CORE AND USE_GPU_CORE)
+    message(FATAL_ERROR
+        "USE_RUST_CORE and USE_GPU_CORE cannot both be ON: their staticlibs each\n"
+        "embed the Rust runtime, causing duplicate symbol errors at link time.\n"
+        "Choose one path:\n"
+        "  -DUSE_RUST_CORE=ON  -DUSE_GPU_CORE=OFF (default; CPU rayon parallel)\n"
+        "  -DUSE_RUST_CORE=OFF -DUSE_GPU_CORE=ON  (GPU prototype, C++ CPU fallback)"
+    )
+endif()
+
 if(USE_RUST_CORE)
     set(RUST_MANIFEST "${CMAKE_SOURCE_DIR}/smooth-ae/rust/smooth_core/Cargo.toml")
     set(RUST_TARGET_DIR "${CMAKE_BINARY_DIR}/cargo-target")

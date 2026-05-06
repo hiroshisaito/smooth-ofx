@@ -361,6 +361,15 @@ GPU アクセラレーション経路は wgpu crate (`rust/smooth_gpu/`) で
   シンボルにリンクするため MSYS2 MinGW 開発経路でも `smooth_gpu` は
   リンク不可。MSVC が検出されない場合は `USE_RUST_CORE` と同様に
   オフにする想定
+- **`USE_RUST_CORE` と `USE_GPU_CORE` は相互排他**: 両 staticlib に
+  Rust ランタイム (`std::panicking::EMPTY_PANIC`、
+  `_rust_eh_personality` 等) が同梱されているため、同時リンクすると
+  C++ 側のリンク段階で duplicate symbol エラー。CMake は両方 ON で
+  `FATAL_ERROR` を投げる。`smooth_core` は `crate-type` が
+  `staticlib` 限定で `smooth_gpu` に Rust path-dep として埋め込めない
+  (AE 側 submodule の変更が必要)。これが解決するまで
+  `USE_GPU_CORE=ON` 時の CPU フォールバックは C++ ベースライン経路
+  (`USE_RUST_CORE=OFF` と同じ実装)。
 
 実 algorithm kernel が landing したらこの節に「GPU ビルドマトリクス」
 を追記する予定。それまでは申し送り情報として参照のみ。
