@@ -60,6 +60,7 @@ static OfxMultiThreadSuiteV1  *gThreadHost  = nullptr;
 #define kParamWhiteOption   "whiteOption"
 #define kParamRange         "range"
 #define kParamLineWeight    "lineWeight"
+#define kParamUseGpu        "useGpu"
 #define kParamBuildInfo     "buildInfo"
 
 //---------------------------------------------------------------------------//
@@ -71,6 +72,9 @@ struct MyInstanceData {
     OfxParamHandle      whiteOptionParam;
     OfxParamHandle      rangeParam;
     OfxParamHandle      lineWeightParam;
+#ifdef SMOOTH_OFX_USE_GPU_CORE
+    OfxParamHandle      useGpuParam;
+#endif
     OfxParamHandle      buildInfoParam;
 };
 
@@ -261,7 +265,8 @@ static void smoothing(PixelType *in_ptr,
                       int height,
                       bool white_option,
                       double range_param,
-                      double line_weight_param)
+                      double line_weight_param,
+                      bool use_gpu)
 {
     // 白抜き + 領域検出
     OfxRectI extent;
@@ -271,25 +276,29 @@ static void smoothing(PixelType *in_ptr,
     // OFX RGBA layout 専用 kernel `smooth_gpu_preprocess_ofx_u8` を使うので
     // swizzle 不要、in-place で white-key 抜きと bbox 取得が GPU 並列で行える。
     // GPU init / dispatch が失敗した場合は黙って CPU preProcess に fallback。
+    // `use_gpu` (Inspector の "GPU" チェックボックス) で完全無効化も可能。
     bool gpu_preprocess_ok = false;
-    if constexpr (std::is_same_v<PixelType, OfxRGBAColourB>) {
-        smooth_gpu_bbox_t gpu_bbox;
-        const int32_t rowbytes = width * (int32_t)sizeof(PixelType);
-        const uint32_t st = smooth_gpu_preprocess_ofx_u8(
-            (const uint32_t *)in_ptr, (uint32_t *)in_ptr,
-            rowbytes, height, white_option ? 1 : 0, &gpu_bbox);
-        if (st == SMOOTH_GPU_STATUS_OK) {
-            extent.x1 = gpu_bbox.left;
-            extent.y1 = gpu_bbox.top;
-            extent.x2 = gpu_bbox.right;
-            extent.y2 = gpu_bbox.bottom;
-            gpu_preprocess_ok = true;
+    if (use_gpu) {
+        if constexpr (std::is_same_v<PixelType, OfxRGBAColourB>) {
+            smooth_gpu_bbox_t gpu_bbox;
+            const int32_t rowbytes = width * (int32_t)sizeof(PixelType);
+            const uint32_t st = smooth_gpu_preprocess_ofx_u8(
+                (const uint32_t *)in_ptr, (uint32_t *)in_ptr,
+                rowbytes, height, white_option ? 1 : 0, &gpu_bbox);
+            if (st == SMOOTH_GPU_STATUS_OK) {
+                extent.x1 = gpu_bbox.left;
+                extent.y1 = gpu_bbox.top;
+                extent.x2 = gpu_bbox.right;
+                extent.y2 = gpu_bbox.bottom;
+                gpu_preprocess_ok = true;
+            }
         }
     }
     if (!gpu_preprocess_ok) {
         preProcess<PixelType>(in_ptr, width, height, &extent, white_option);
     }
 #else
+    (void)use_gpu;  // unused when smooth_gpu is not linked
     preProcess<PixelType>(in_ptr, width, height, &extent, white_option);
 #endif
 
@@ -619,6 +628,19 @@ describeInContext(OfxImageEffectHandle effect, OfxPropertySetHandle /*inArgs*/)
     gPropHost->propSetString(props, kOfxParamPropHint, 0, "Smoothing line weight (0=thin, 1=thick)");
     gPropHost->propSetString(props, kOfxParamPropScriptName, 0, kParamLineWeight);
 
+#ifdef SMOOTH_OFX_USE_GPU_CORE
+    // GPU acceleration toggle. Only present in builds that link smooth_gpu.
+    // Default ON: when GPU init succeeds, the 8bpc preprocess pass runs on
+    // GPU. Toggle OFF to force the C++ preprocess fallback (useful for A/B
+    // verification, or for the case where the GPU round-trip is slower than
+    // the host's CPU preprocess on the current image / hardware).
+    gParamHost->paramDefine(paramSet, kOfxParamTypeBoolean, kParamUseGpu, &props);
+    gPropHost->propSetInt(props, kOfxParamPropDefault, 0, 1);
+    gPropHost->propSetString(props, kOfxPropLabel, 0, "GPU");
+    gPropHost->propSetString(props, kOfxParamPropHint, 0, "Use GPU acceleration for the 8bpc preprocess pass. May be slower than CPU on this build because the GPU round-trip cost can outweigh the savings on small kernels.");
+    gPropHost->propSetString(props, kOfxParamPropScriptName, 0, kParamUseGpu);
+#endif
+
     // ビルド ID 表示用 read-only テキストフィールド。
     // DaVinci Resolve は `kOfxParamStringIsLabel` の値をレンダリングしないため、
     // 「SingleLine + Enabled=0 (disabled)」という他 OFX プラグインでも一般的な
@@ -689,6 +711,9 @@ createInstance(OfxImageEffectHandle effect)
     gParamHost->paramGetHandle(paramSet, kParamWhiteOption, &myData->whiteOptionParam, 0);
     gParamHost->paramGetHandle(paramSet, kParamRange,       &myData->rangeParam,       0);
     gParamHost->paramGetHandle(paramSet, kParamLineWeight,  &myData->lineWeightParam,  0);
+#ifdef SMOOTH_OFX_USE_GPU_CORE
+    gParamHost->paramGetHandle(paramSet, kParamUseGpu,      &myData->useGpuParam,      0);
+#endif
     gParamHost->paramGetHandle(paramSet, kParamBuildInfo,   &myData->buildInfoParam,   0);
     // buildInfo の値は describeInContext で kOfxParamPropDefault に焼き付け済み。
     // (Resolve の label-mode は paramSetValue を反映しないため。)
@@ -896,9 +921,13 @@ render(OfxImageEffectHandle instance,
     int    whiteOption = 0;
     double range       = 1.0;
     double lineWeight  = 0.0;
+    int    useGpu      = 1;  // default ON; ignored unless USE_GPU_CORE is built
     gParamHost->paramGetValueAtTime(myData->whiteOptionParam, time, &whiteOption);
     gParamHost->paramGetValueAtTime(myData->rangeParam,       time, &range);
     gParamHost->paramGetValueAtTime(myData->lineWeightParam,  time, &lineWeight);
+#ifdef SMOOTH_OFX_USE_GPU_CORE
+    gParamHost->paramGetValueAtTime(myData->useGpuParam,      time, &useGpu);
+#endif
 
     OfxPropertySetHandle sourceImg = nullptr, outputImg = nullptr;
     OfxStatus status = kOfxStatOK;
@@ -1014,13 +1043,15 @@ render(OfxImageEffectHandle instance,
             smoothing<OfxRGBAColourF>((OfxRGBAColourF *)srcBuf,
                                       (OfxRGBAColourF *)dstBuf,
                                       width, height,
-                                      whiteOption != 0, range, lineWeight);
+                                      whiteOption != 0, range, lineWeight,
+                                      useGpu != 0);
 #endif
         } else if (is16bit) {
             smoothing<OfxRGBAColourS>((OfxRGBAColourS *)srcBuf,
                                       (OfxRGBAColourS *)dstBuf,
                                       width, height,
-                                      whiteOption != 0, range, lineWeight);
+                                      whiteOption != 0, range, lineWeight,
+                                      useGpu != 0);
         } else {
 #ifdef SMOOTH_OFX_USE_RUST_CORE
             smoothing_via_rust<OfxRGBAColourB>((OfxRGBAColourB *)srcBuf,
@@ -1031,7 +1062,8 @@ render(OfxImageEffectHandle instance,
             smoothing<OfxRGBAColourB>((OfxRGBAColourB *)srcBuf,
                                       (OfxRGBAColourB *)dstBuf,
                                       width, height,
-                                      whiteOption != 0, range, lineWeight);
+                                      whiteOption != 0, range, lineWeight,
+                                      useGpu != 0);
 #endif
         }
 
