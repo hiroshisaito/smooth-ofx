@@ -83,7 +83,8 @@ clear quarantine before loading):
 - `dist/smooth-1.6.0-macos-arm64.zip` — Apple Silicon
 - `dist/smooth-1.6.0-macos-x86_64.zip` — Intel
 - Windows / Linux builds are queued for separate post-macOS work; see
-  [BUILDING.md § 9](BUILDING.md) for the cross-platform build matrix.
+  [BUILDING.md](BUILDING.md) for the platform-specific recipes
+  (§ 3.3 Windows MSVC, § 3.5 Linux) and § 10 for a CI sketch.
 
 ```bash
 # Install (macOS Intel example; replace with -arm64 on Apple Silicon)

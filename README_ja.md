@@ -12,9 +12,13 @@ Fusion など OFX 対応ホストで利用できるようにしました。
 
 - 8-bit / 16-bit 整数、16-bit / 32-bit float の RGBA に対応
 - プリマルチプライドアルファ対応 (入力を自動で straight に展開し、処理後に戻す)
-- パラメータ: `range`、`line weight`、`transparent`
-- CPU 処理のみ (GPU レンダリングパスは未実装)
-- 第三者ライブラリ依存なし (OFX ヘッダのみ)
+- パラメータ: `range`、`line weight`、`transparent`、加えて Inspector に
+  read-only の `build` ラベルを表示
+- 出荷経路は CPU (Rust core、rayon 並列)。`-DUSE_GPU_CORE=ON` でビルド
+  すると wgpu による実験的な GPU preprocess が有効化され、Inspector に
+  `GPU` トグルが追加される — ステータスは [CHANGELOG.md](CHANGELOG.md) 参照
+- 第三者ライブラリ依存なし (OFX ヘッダのみ)。macOS の出荷バンドルは
+  `libc++` と `libSystem` のみリンク
 
 ## 対応プラットフォーム
 

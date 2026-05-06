@@ -14,9 +14,14 @@ Fusion and other OFX-compliant hosts.
 
 - 8-bit / 16-bit integer and 16-bit / 32-bit float RGBA pixel support
 - Premultiplied-alpha correct (auto-converted on input and restored on output)
-- Parameters: `range`, `line weight`, `transparent`
-- CPU only (no GPU render path)
-- No third-party runtime dependencies (OFX headers only)
+- Parameters: `range`, `line weight`, `transparent`, plus a read-only
+  `build` identity label in the Inspector
+- Shipping path is CPU (Rust core, rayon-parallel). An optional
+  experimental GPU preprocess (wgpu, opt-in via `-DUSE_GPU_CORE=ON`)
+  exposes a `GPU` toggle in the Inspector — see
+  [CHANGELOG.md](CHANGELOG.md) for status
+- No third-party runtime dependencies (OFX headers only); on macOS the
+  shipping bundle links only `libc++` and `libSystem`
 
 ## Supported platforms
 

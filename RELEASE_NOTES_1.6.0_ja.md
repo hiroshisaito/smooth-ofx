@@ -76,7 +76,8 @@ vs 1.4.0 C++-only ベースライン):
 - `dist/smooth-1.6.0-macos-arm64.zip` — Apple Silicon
 - `dist/smooth-1.6.0-macos-x86_64.zip` — Intel
 - Windows / Linux ビルドは macOS リリース後の別タスク。
-  [BUILDING.md § 9](BUILDING.md) のマトリクス参照。
+  [BUILDING.md](BUILDING.md) のプラットフォーム別レシピを参照
+  (§ 3.3 Windows MSVC、§ 3.5 Linux、§ 10 に CI スケッチ)。
 
 ```bash
 # インストール (macOS Intel 例、Apple Silicon は -arm64 に置換)
