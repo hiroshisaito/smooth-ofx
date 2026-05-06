@@ -11,6 +11,7 @@
 #include <cstdlib>
 #include <stdexcept>
 #include <new>
+#include <type_traits>
 
 #ifndef SMOOTH_OFX_VERSION
 #  define SMOOTH_OFX_VERSION "1.4.0"
@@ -264,7 +265,33 @@ static void smoothing(PixelType *in_ptr,
 {
     // 白抜き + 領域検出
     OfxRectI extent;
+
+#ifdef SMOOTH_OFX_USE_GPU_CORE
+    // ハイブリッド経路 (Phase F-4): 8bpc は GPU preprocess に投げる。
+    // OFX RGBA layout 専用 kernel `smooth_gpu_preprocess_ofx_u8` を使うので
+    // swizzle 不要、in-place で white-key 抜きと bbox 取得が GPU 並列で行える。
+    // GPU init / dispatch が失敗した場合は黙って CPU preProcess に fallback。
+    bool gpu_preprocess_ok = false;
+    if constexpr (std::is_same_v<PixelType, OfxRGBAColourB>) {
+        smooth_gpu_bbox_t gpu_bbox;
+        const int32_t rowbytes = width * (int32_t)sizeof(PixelType);
+        const uint32_t st = smooth_gpu_preprocess_ofx_u8(
+            (const uint32_t *)in_ptr, (uint32_t *)in_ptr,
+            rowbytes, height, white_option ? 1 : 0, &gpu_bbox);
+        if (st == SMOOTH_GPU_STATUS_OK) {
+            extent.x1 = gpu_bbox.left;
+            extent.y1 = gpu_bbox.top;
+            extent.x2 = gpu_bbox.right;
+            extent.y2 = gpu_bbox.bottom;
+            gpu_preprocess_ok = true;
+        }
+    }
+    if (!gpu_preprocess_ok) {
+        preProcess<PixelType>(in_ptr, width, height, &extent, white_option);
+    }
+#else
     preProcess<PixelType>(in_ptr, width, height, &extent, white_option);
+#endif
 
     // 入力を出力にコピー
     std::memcpy(out_ptr, in_ptr, sizeof(PixelType) * (size_t)width * (size_t)height);

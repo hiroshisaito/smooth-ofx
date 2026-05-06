@@ -103,6 +103,19 @@ uint32_t smooth_gpu_preprocess_u8(
     int32_t           is_white_trans,
     smooth_gpu_bbox_t *bbox_out);
 
+/* Phase F-4: u8 (OFX `OfxRGBAColourB` RGBA) preprocess on GPU.
+ * Counterpart of `smooth_gpu_preprocess_u8`; this one matches the OFX
+ * byte layout natively so the C++ render path can call it without a
+ * swizzle pre/post pass. Other than the byte layout, the contract is
+ * identical. */
+uint32_t smooth_gpu_preprocess_ofx_u8(
+    const uint32_t   *src_ptr,
+    uint32_t         *out_ptr,
+    int32_t           rowbytes,
+    int32_t           height,
+    int32_t           is_white_trans,
+    smooth_gpu_bbox_t *bbox_out);
+
 /* Phase F-2A: per-pixel mode_flg detection on GPU.
  *
  * For each interior pixel computes the 4-bit mode_flg used by
