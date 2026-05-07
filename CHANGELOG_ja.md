@@ -88,6 +88,30 @@ wgpu (Metal / Vulkan / DX12) を使ったクロスプラットフォーム GPU �
   を実装。いずれかが解禁されるまで本番構成は
   `USE_RUST_CORE=ON, USE_GPU_CORE=OFF` のまま。
 
+### ビルド (macOS リリース後の Windows 向け修正、2026-05-08)
+
+macOS arm64 / x86_64 リリースは 2026-05-05 に
+VS 17 2022 + Windows 10 SDK 想定でカット済。1.6.0 を Windows 11
+クリーン環境で **VS 18 2026 + Windows 11 SDK 10.0.26100 + Rust 1.94**
+の組み合わせでビルドすると、3 件のリグレッションが顕在化したため
+修正を加えた。いずれも MSVC スコープに閉じた変更で、生成される
+smooth.ofx は macOS 出荷ビルドとバイト一致 (`host_smoke` の 8/16/float
+3 パスとも `pure0=562 pureMax=562 intermediate=924 / 2048`)。
+
+- `isWhitePixel<OfxRGBAColourS>` 内の `near` ラムダを `is_near` に
+  リネームし、`windef.h` の `near` マクロ (16-bit セグメント修飾子の
+  遺物。現代 SDK では空マクロ) との衝突を回避。MSVC プリプロセッサが
+  識別子を消し去って `C2513` ビルドエラーになっていた問題への対応。
+- CMake グルーが cargo の static lib 命名規則を、MSVC ターゲットでは
+  `<crate>.lib`、GNU 系では `lib<crate>.a` と分岐するように修正。
+  以前はリンク時に
+  `LNK1181: cannot open input file libsmooth_core.a` で失敗していた。
+- Rust 1.94 の std が要求する Windows ネイティブ依存ライブラリ
+  (`ntdll` / `userenv` / `ws2_32` / `dbghelp`) を `MSVC` 時に明示
+  リンク。これらが無いと `LNK1120: 2 unresolved externals` で
+  `__imp_NtWriteFile` / `__imp_RtlNtStatusToDosError`
+  (`std::sys::stdio::windows::write` 経由) が解決できなかった。
+
 ### 注意 (Notes)
 
 - バンドルサイズが ~134 KB → ~607 KB (arm64) に増加。rayon + その

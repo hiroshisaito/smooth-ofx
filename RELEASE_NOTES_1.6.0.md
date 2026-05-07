@@ -80,11 +80,16 @@ crate gains an OFX-flavour 16bpc max value.
 Per-architecture single-arch zips, ad hoc signed (no notarization yet —
 clear quarantine before loading):
 
-- `dist/smooth-1.6.0-macos-arm64.zip` — Apple Silicon
-- `dist/smooth-1.6.0-macos-x86_64.zip` — Intel
-- Windows / Linux builds are queued for separate post-macOS work; see
-  [BUILDING.md](BUILDING.md) for the platform-specific recipes
-  (§ 3.3 Windows MSVC, § 3.5 Linux) and § 10 for a CI sketch.
+- `dist/smooth-1.6.0-macos-arm64.zip` — Apple Silicon (ad hoc signed)
+- `dist/smooth-1.6.0-macos-x86_64.zip` — Intel (ad hoc signed)
+- `dist/smooth-1.6.0-windows-x64.zip` — Windows x64 (MSVC, unsigned;
+  added 2026-05-08 with build id `1.6.0+c23db4c` after the canonical
+  DaVinci Resolve 5-point UAT passed on Windows 11. See
+  [BUILD_HANDOFF_WINDOWS.md](BUILD_HANDOFF_WINDOWS.md) for the
+  reproducible recipe.)
+- Linux build is queued for separate work; see [BUILDING.md](BUILDING.md)
+  § 3.5 and [BUILD_HANDOFF_LINUX.md](BUILD_HANDOFF_LINUX.md). § 10 of
+  BUILDING sketches a CI matrix.
 
 ```bash
 # Install (macOS Intel example; replace with -arm64 on Apple Silicon)

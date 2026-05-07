@@ -73,11 +73,16 @@ vs 1.4.0 C++-only ベースライン):
 アーキ別シングルアーキ zip、アドホック署名済み (notarization 未実施 —
 ロード前に quarantine 属性を除去してください):
 
-- `dist/smooth-1.6.0-macos-arm64.zip` — Apple Silicon
-- `dist/smooth-1.6.0-macos-x86_64.zip` — Intel
-- Windows / Linux ビルドは macOS リリース後の別タスク。
-  [BUILDING.md](BUILDING.md) のプラットフォーム別レシピを参照
-  (§ 3.3 Windows MSVC、§ 3.5 Linux、§ 10 に CI スケッチ)。
+- `dist/smooth-1.6.0-macos-arm64.zip` — Apple Silicon (アドホック署名済)
+- `dist/smooth-1.6.0-macos-x86_64.zip` — Intel (アドホック署名済)
+- `dist/smooth-1.6.0-windows-x64.zip` — Windows x64 (MSVC、未署名。
+  2026-05-08 に build id `1.6.0+c23db4c` で追加。Windows 11 で
+  DaVinci Resolve canonical 5 点 UAT に PASS した上で配布物化。
+  再現手順は [BUILD_HANDOFF_WINDOWS_ja.md](BUILD_HANDOFF_WINDOWS_ja.md)
+  を参照)
+- Linux ビルドは別タスク。[BUILDING_ja.md](BUILDING_ja.md) § 3.5 と
+  [BUILD_HANDOFF_LINUX_ja.md](BUILD_HANDOFF_LINUX_ja.md) を参照。
+  § 10 に CI マトリクスのスケッチあり。
 
 ```bash
 # インストール (macOS Intel 例、Apple Silicon は -arm64 に置換)
