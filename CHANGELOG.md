@@ -91,6 +91,32 @@ distributed binaries.
   one of those lands, the production configuration remains
   `USE_RUST_CORE=ON, USE_GPU_CORE=OFF`.
 
+### Build (post-macOS-release Windows fixes, 2026-05-08)
+
+The macOS arm64 / x86_64 release was cut on 2026-05-05 against
+VS 17 2022 + Windows 10 SDK era assumptions. Building 1.6.0 from a
+clean Windows 11 host using the **VS 18 2026 + Windows 11 SDK
+10.0.26100 + Rust 1.94** combination uncovered three regressions; all
+fixes are MSVC-scoped and the resulting smooth.ofx is
+byte-identical to the macOS shipping build (`pure0=562 pureMax=562
+intermediate=924 / 2048` across 8/16/float in `host_smoke`).
+
+- Renamed the `near` lambda in `isWhitePixel<OfxRGBAColourS>` to
+  `is_near` so it does not collide with the legacy `windef.h` `near`
+  macro (16-bit segment qualifier, defined empty on modern SDKs).
+  MSVC's preprocessor was stripping the identifier, producing a
+  `C2513` build break.
+- Taught the CMake glue that cargo names the static lib
+  `<crate>.lib` on `*-pc-windows-msvc` (vs. `lib<crate>.a` for
+  GNU-flavoured targets), fixing
+  `LNK1181: cannot open input file libsmooth_core.a` at the link
+  step.
+- Linked the Windows native deps that Rust 1.94's std requires —
+  `ntdll`, `userenv`, `ws2_32`, `dbghelp` — when `MSVC` is true.
+  Without them the link ended with `LNK1120: 2 unresolved externals`
+  pointing at `__imp_NtWriteFile` and `__imp_RtlNtStatusToDosError`
+  in `std::sys::stdio::windows::write`.
+
 ### Notes
 
 - Bundle size grew (~134 KB -> ~607 KB on arm64) because rayon and
