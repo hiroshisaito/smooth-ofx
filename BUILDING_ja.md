@@ -132,6 +132,12 @@ smooth-1.6.0-macos-arm64.zip
 └── RELEASE-NOTES.txt                        (dist/RELEASE-NOTES.txt)
 ```
 
+Windows のステップバイステップ申し送り (Visual Studio インストール
+から UAT まで) は [BUILD_HANDOFF_WINDOWS_ja.md](BUILD_HANDOFF_WINDOWS_ja.md)
+を参照。Rocky Linux 9.5 版は
+[BUILD_HANDOFF_LINUX_ja.md](BUILD_HANDOFF_LINUX_ja.md)。以下の節は
+クロスプラットフォーム共通リファレンスとして残します。
+
 ### 3.3 Windows — MSVC リリースビルド (配布版推奨)
 
 DaVinci Resolve や Fusion など商用 OFX ホストは MSVC 製バイナリで

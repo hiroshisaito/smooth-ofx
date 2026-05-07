@@ -134,6 +134,12 @@ smooth-1.6.0-macos-arm64.zip
 └── RELEASE-NOTES.txt                        (dist/RELEASE-NOTES.txt)
 ```
 
+For a step-by-step Windows handoff (Visual Studio install through
+UAT) see [BUILD_HANDOFF_WINDOWS.md](BUILD_HANDOFF_WINDOWS.md). For the
+Rocky Linux 9.5 equivalent see
+[BUILD_HANDOFF_LINUX.md](BUILD_HANDOFF_LINUX.md). The sections below
+remain the concise cross-platform reference.
+
 ### 3.3 Windows — MSVC release build (recommended for distribution)
 
 Resolve and most other commercial OFX hosts ship MSVC-compiled binaries,
