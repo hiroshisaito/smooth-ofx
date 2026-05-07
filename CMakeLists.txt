@@ -258,6 +258,12 @@ if(USE_RUST_CORE)
     add_custom_target(smooth_core_lib ALL DEPENDS "${SMOOTH_CORE_LIB}")
     add_dependencies(smooth smooth_core_lib)
     target_link_libraries(smooth PRIVATE "${SMOOTH_CORE_LIB}")
+    # MSVC: cargo's static lib does not propagate the native deps Rust's std
+    # needs. `cargo rustc -- --print native-static-libs` reports the set below
+    # for x86_64-pc-windows-msvc on Rust 1.94+; kernel32 is implicit.
+    if(MSVC)
+        target_link_libraries(smooth PRIVATE ntdll userenv ws2_32 dbghelp)
+    endif()
     target_include_directories(smooth PRIVATE
         "${CMAKE_SOURCE_DIR}/smooth-ae/rust/smooth_core/include"
     )
