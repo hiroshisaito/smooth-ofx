@@ -16,17 +16,24 @@ access, ~30 GB free disk (Visual Studio included).
 
 ## 1. Toolchain installation
 
-### 1.1 Visual Studio 2022 Community (required)
+### 1.1 Visual Studio (required)
 
 1. Get the installer from
-   <https://visualstudio.microsoft.com/downloads/> (Community 2022).
+   <https://visualstudio.microsoft.com/downloads/>. Either **Community
+   2022** (the original target) or **Community 2026** works.
 2. In the Visual Studio Installer, pick the **Desktop development
    with C++** workload — that's all you need.
 3. Verify the right pane includes at minimum:
-   - MSVC v143 — VS 2022 C++ x64/x86 build tools
-   - Windows 11 SDK (10.0.22621.0 or newer)
+   - MSVC v143 (VS 2022) or v145 (VS 2026) — C++ x64/x86 build tools
+   - Windows 11 SDK (10.0.22621.0 or newer; 10.0.26100.0 is what the
+     2026-05-08 reference build used)
    - C++ CMake tools for Windows (CMake 3.27+ bundled)
 4. Install. ~10 GB download, ~30 minutes.
+
+> **Verified toolchain (2026-05-08 Windows 1.6.0 release build)**:
+> VS 18 2026 + Windows 11 SDK 10.0.26100.0 + Rust 1.94.0. The original
+> VS 17 2022 path is still expected to work; both produce the same
+> `smooth.ofx` per `host_smoke` byte-equality.
 
 ### 1.2 Git for Windows (required)
 
@@ -79,6 +86,11 @@ Confirm `include\openfx\include\ofxImageEffect.h` and
 ```powershell
 cmake -S . -B build-msvc -G "Visual Studio 17 2022" -A x64
 ```
+
+(If you installed VS 2026 instead of VS 2022, use
+`-G "Visual Studio 18 2026"` here. CMake's default generator on a host
+that has VS 2026 is already 18 2026; you can also drop `-G` and rely on
+the default.)
 
 Watch for these lines near the end of configure output:
 
@@ -211,7 +223,8 @@ Windows 1.6.0 build report
 ==========================
 Date:         YYYY-MM-DD HH:MM TZ
 Host:         Windows 11 (build xxx), x86_64
-Compiler:     MSVC v143 (VS 2022 17.x.x)
+Compiler:     MSVC v143 (VS 2022 17.x.x) | MSVC v145 (VS 2026 18.x.x)
+Windows SDK:  10.0.22621.0 | 10.0.26100.0
 Rust:         rustc 1.x.y
 Build ID:     1.6.0+<sha>
 host_smoke:   3 paths PASS (562/562/924)

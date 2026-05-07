@@ -26,17 +26,21 @@ as an After Effects plugin. Verified on DaVinci Resolve on both Windows and
 macOS.
 
 
-Release artifacts (macOS)
--------------------------
+Release artifacts
+-----------------
 
-Per-architecture builds are shipped separately; pick the one that matches
-the Mac you install on:
+macOS (per-architecture, pick the one that matches your Mac):
 
   * smooth-1.6.0-macos-arm64.zip    — Apple Silicon (M1 / M2 / M3 / M4 …)
   * smooth-1.6.0-macos-x86_64.zip   — Intel Macs
 
-Each archive contains smooth.ofx.bundle (single-arch), README.txt, and
-RELEASE-NOTES.txt.
+Windows:
+
+  * smooth-1.6.0-windows-x64.zip    — Windows 10 / 11 x64 (MSVC build,
+                                      unsigned; SmartScreen may warn on
+                                      first load)
+
+Each archive contains smooth.ofx.bundle, README.txt, and RELEASE-NOTES.txt.
 
 SHA-256 digests are provided alongside each zip as .zip.sha256 files.
 
@@ -50,6 +54,18 @@ Summary:
   1. Unzip, copy smooth.ofx.bundle to /Library/OFX/Plugins/
   2. sudo xattr -dr com.apple.quarantine /Library/OFX/Plugins/smooth.ofx.bundle
   3. Restart DaVinci Resolve -> Effects -> Filters -> Smooth
+
+
+Install (Windows)
+-----------------
+
+See the README.txt bundled inside the archive for step-by-step instructions.
+
+Summary (run PowerShell as Administrator):
+  1. Quit DaVinci Resolve completely (including the tray icon).
+  2. Unzip; copy smooth.ofx.bundle to
+       C:\Program Files\Common Files\OFX\Plugins\
+  3. Restart DaVinci Resolve -> Effects -> OpenFX -> Filters -> Smooth
 
 
 What was in 1.4.0 (carried into 1.6.0)
@@ -89,6 +105,9 @@ Known limitations
     loading:
       sudo xattr -dr com.apple.quarantine \
         /Library/OFX/Plugins/smooth.ofx.bundle
+  * Windows release zip is unsigned (no Authenticode certificate).
+    SmartScreen may warn on first load; click "More info -> Run anyway"
+    to proceed.
 
 
 Checksums
@@ -96,6 +115,9 @@ Checksums
 
   * dist/smooth-1.6.0-macos-arm64.zip.sha256
   * dist/smooth-1.6.0-macos-x86_64.zip.sha256
+  * dist/smooth-1.6.0-windows-x64.zip.sha256
+      SHA-256:
+      80eae1b63fec3a901b4aa9571d1b69c24628caa3d8e779f9a4a420eee2237e43
 
 
 License and acknowledgments

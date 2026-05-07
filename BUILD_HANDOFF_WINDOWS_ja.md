@@ -15,18 +15,25 @@
 
 ## 1. 必要ツールのインストール
 
-### 1.1 Visual Studio 2022 Community (必須)
+### 1.1 Visual Studio (必須)
 
-1. <https://visualstudio.microsoft.com/downloads/> から **Community
-   2022** のインストーラを取得
+1. <https://visualstudio.microsoft.com/downloads/> からインストーラを
+   取得。**Community 2022** (本ドキュメントの当初想定) か
+   **Community 2026** のどちらでも OK
 2. Visual Studio Installer 起動 → **Workloads** タブで以下を選択:
    - ☑ **Desktop development with C++** (これだけで OK)
 3. 右側の「Installation details」を確認し、最低限以下が含まれている
    こと:
-   - MSVC v143 - VS 2022 C++ x64/x86 build tools
-   - Windows 11 SDK (10.0.22621.0 以上)
+   - MSVC v143 (VS 2022) または v145 (VS 2026) — C++ x64/x86 build tools
+   - Windows 11 SDK (10.0.22621.0 以上、2026-05-08 のリファレンスビルドは
+     10.0.26100.0)
    - C++ CMake tools for Windows (CMake 3.27 以上を含む)
 4. インストール (~10 GB ダウンロード、~30 分)
+
+> **動作検証済ツールチェーン (2026-05-08 Windows 1.6.0 リリースビルド)**:
+> VS 18 2026 + Windows 11 SDK 10.0.26100.0 + Rust 1.94.0。
+> 当初想定の VS 17 2022 経路も引き続き利用可能。`host_smoke` の
+> バイト一致で両者が同一の `smooth.ofx` を生成することを確認済。
 
 ### 1.2 Git for Windows (必須)
 
@@ -83,6 +90,11 @@ PowerShell から:
 ```powershell
 cmake -S . -B build-msvc -G "Visual Studio 17 2022" -A x64
 ```
+
+(VS 2022 ではなく VS 2026 をインストールした場合は
+`-G "Visual Studio 18 2026"` を指定。VS 2026 がインストールされた環境では
+CMake のデフォルトジェネレータが既に 18 2026 になるので、`-G` を省略しても
+OK)
 
 成功時、最後に以下のような行が出る:
 
@@ -226,7 +238,8 @@ Windows 1.6.0 ビルド報告
 =========================
 日時:        YYYY-MM-DD HH:MM JST
 ホスト:      Windows 11 (バージョン xxx)、x86_64
-コンパイラ:  MSVC v143 (VS 2022 17.x.x)
+コンパイラ:  MSVC v143 (VS 2022 17.x.x) | MSVC v145 (VS 2026 18.x.x)
+Windows SDK: 10.0.22621.0 | 10.0.26100.0
 Rust:        rustc 1.x.y (yyy)
 Build ID:    1.6.0+<sha>
 host_smoke:  3 paths PASS (562/562/924)
