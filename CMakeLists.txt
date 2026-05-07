@@ -208,9 +208,15 @@ if(USE_RUST_CORE)
     endif()
 
     # Per-arch cargo build commands; collect resulting static libs for lipo merge.
+    # Cargo names static libs per platform: MSVC -> `<crate>.lib`, everything
+    # else (MinGW, macOS, Linux) -> `lib<crate>.a`.
     set(_RUST_LIB_FILES "")
     foreach(_RUST_TGT IN LISTS _RUST_TARGETS)
-        set(_LIB_PATH "${RUST_TARGET_DIR}/${_RUST_TGT}/release/libsmooth_core.a")
+        if(_RUST_TGT MATCHES "windows-msvc$")
+            set(_LIB_PATH "${RUST_TARGET_DIR}/${_RUST_TGT}/release/smooth_core.lib")
+        else()
+            set(_LIB_PATH "${RUST_TARGET_DIR}/${_RUST_TGT}/release/libsmooth_core.a")
+        endif()
         list(APPEND _RUST_LIB_FILES "${_LIB_PATH}")
 
         set(_CARGO_ENV "")
