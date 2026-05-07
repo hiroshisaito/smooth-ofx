@@ -367,6 +367,16 @@ GPU アクセラレーション経路は wgpu crate (`rust/smooth_gpu/`) で
   シンボルにリンクするため MSYS2 MinGW 開発経路でも `smooth_gpu` は
   リンク不可。MSVC が検出されない場合は `USE_RUST_CORE` と同様に
   オフにする想定
+- **Windows MSVC `*.lib` ファイル名ギャップ**: smooth_core 側の
+  CMake は commit `0a42112` で `*-pc-windows-msvc` の `<crate>.lib`
+  を選択する分岐を追加済 (GNU 系 `lib<crate>.a` ではない)。一方
+  smooth_gpu 側 ([CMakeLists.txt:331](CMakeLists.txt)) は依然
+  `libsmooth_gpu.a` を決め打ちしており未対応。Windows MSVC で
+  `USE_GPU_CORE=ON` をビルドしようとすると、smooth_core 修正前と同じ
+  `LNK1181: cannot open input file libsmooth_gpu.a` で停止する。
+  smooth_core ブロック (211 行目以降) と同じパターンで分岐を入れれば
+  解決可能。出荷経路への影響なし、GPU プロトタイプ有効化希望者向けの
+  follow-up として保留中
 - **`USE_RUST_CORE` と `USE_GPU_CORE` は相互排他**: 両 staticlib に
   Rust ランタイム (`std::panicking::EMPTY_PANIC`、
   `_rust_eh_personality` 等) が同梱されているため、同時リンクすると

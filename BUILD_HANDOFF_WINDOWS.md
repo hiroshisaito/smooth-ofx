@@ -23,8 +23,13 @@ access, ~30 GB free disk (Visual Studio included).
 2. In the Visual Studio Installer, pick the **Desktop development
    with C++** workload — that's all you need.
 3. Verify the right pane includes at minimum:
-   - MSVC v143 — VS 2022 C++ x64/x86 build tools
-   - Windows 11 SDK (10.0.22621.0 or newer)
+   - MSVC v14x — your VS's C++ x64/x86 build tools (VS 2022 = v143,
+     VS 2026 = v144)
+   - Windows 11 SDK (**10.0.26100 or newer recommended**; 22621 also
+     builds, but Rust 1.94's std stdio needs `__imp_NtWriteFile` /
+     `__imp_RtlNtStatusToDosError`, which the CMake glue auto-links
+     via `ntdll`/`userenv`/`ws2_32`/`dbghelp` — see the CHANGELOG's
+     "Windows MSVC fixes" subsection)
    - C++ CMake tools for Windows (CMake 3.27+ bundled)
 4. Install. ~10 GB download, ~30 minutes.
 
@@ -76,8 +81,14 @@ Confirm `include\openfx\include\ofxImageEffect.h` and
 
 ### 3.1 CMake configure
 
+Pick the generator that matches your installed Visual Studio:
+
 ```powershell
-cmake -S . -B build-msvc -G "Visual Studio 17 2022" -A x64
+# VS 2026 (recommended; verified at commit c23db4c)
+cmake -S . -B build-msvc -G "Visual Studio 18 2026" -A x64
+
+# VS 2022 — substitute the generator name
+# cmake -S . -B build-msvc -G "Visual Studio 17 2022" -A x64
 ```
 
 Watch for these lines near the end of configure output:
@@ -211,7 +222,8 @@ Windows 1.6.0 build report
 ==========================
 Date:         YYYY-MM-DD HH:MM TZ
 Host:         Windows 11 (build xxx), x86_64
-Compiler:     MSVC v143 (VS 2022 17.x.x)
+SDK:          Windows 11 SDK 10.0.xxxxx
+Compiler:     MSVC v14x (VS 2022 17.x.x or VS 2026 18.x.x)
 Rust:         rustc 1.x.y
 Build ID:     1.6.0+<sha>
 host_smoke:   3 paths PASS (562/562/924)

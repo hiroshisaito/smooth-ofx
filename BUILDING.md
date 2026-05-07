@@ -370,6 +370,16 @@ things to watch when the Windows / Linux machines pick up the work:
   symbols on Windows, so the MSYS2 MinGW dev path can't link
   `smooth_gpu` either. Plan to gate it off when MSVC is not detected,
   same way `USE_RUST_CORE` is treated.
+- **Windows MSVC `*.lib` filename gap**: the smooth_core CMake glue
+  was updated in commit `0a42112` to pick `<crate>.lib` on
+  `*-pc-windows-msvc` (vs. the GNU-flavour `lib<crate>.a`). The
+  parallel smooth_gpu code at [CMakeLists.txt:331](CMakeLists.txt)
+  still hard-codes `libsmooth_gpu.a` and has not been updated.
+  Building the GPU prototype on Windows MSVC will hit
+  `LNK1181: cannot open input file libsmooth_gpu.a` until the same
+  branch is added (see the smooth_core block at line 211 onward as
+  the template). Tracked as an opt-in follow-up; no impact on the
+  shipping path.
 - **`USE_RUST_CORE` and `USE_GPU_CORE` are mutually exclusive**:
   both staticlibs embed the Rust runtime (`std::panicking::EMPTY_PANIC`,
   `_rust_eh_personality`, …). Linking them side-by-side fails at the

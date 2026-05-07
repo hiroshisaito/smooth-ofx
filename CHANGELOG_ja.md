@@ -88,6 +88,29 @@ wgpu (Metal / Vulkan / DX12) を使ったクロスプラットフォーム GPU �
   を実装。いずれかが解禁されるまで本番構成は
   `USE_RUST_CORE=ON, USE_GPU_CORE=OFF` のまま。
 
+### ビルド (macOS リリース後の Windows MSVC 修正、2026-05-08)
+
+macOS arm64 / x86_64 リリースは 2026-05-05 に VS 17 2022 + Windows 10
+SDK 系の前提でカットしたが、クリーンな Windows 11 ホスト上で
+**VS 18 2026 + Windows 11 SDK 10.0.26100 + Rust 1.94** の組合せで
+1.6.0 をビルドし直したところ 3 件の regression が露見。すべて MSVC
+スコープの修正で、生成される smooth.ofx は macOS 出荷版と byte-
+identical (`host_smoke` で 8/16/float すべて `pure0=562 pureMax=562
+intermediate=924 / 2048`)。
+
+- `isWhitePixel<OfxRGBAColourS>` 内の `near` ラムダを `is_near` に
+  改名。`windef.h` 由来の legacy `near` マクロ (16-bit segment 修飾子、
+  modern SDK では空定義) と衝突して MSVC プリプロセッサが識別子を
+  剥がし、ビルドが `C2513` で停止していた。
+- CMake の cargo 連携が `*-pc-windows-msvc` の出力名 (`<crate>.lib`、
+  GNU 系の `lib<crate>.a` ではない) を扱えるように分岐。
+  `LNK1181: cannot open input file libsmooth_core.a` を解消。
+- Rust 1.94 の std stdio が要求する Windows ネイティブ依存
+  (`ntdll`, `userenv`, `ws2_32`, `dbghelp`) を `MSVC` ビルドのみ
+  リンクするよう CMake に追加。`std::sys::stdio::windows::write` 内の
+  `__imp_NtWriteFile` / `__imp_RtlNtStatusToDosError` が解決できず
+  `LNK1120: 2 unresolved externals` が出ていたのを解消。
+
 ### 注意 (Notes)
 
 - バンドルサイズが ~134 KB → ~607 KB (arm64) に増加。rayon + その

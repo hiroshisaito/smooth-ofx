@@ -23,8 +23,13 @@
    - ☑ **Desktop development with C++** (これだけで OK)
 3. 右側の「Installation details」を確認し、最低限以下が含まれている
    こと:
-   - MSVC v143 - VS 2022 C++ x64/x86 build tools
-   - Windows 11 SDK (10.0.22621.0 以上)
+   - MSVC v14x — お使いの VS の C++ x64/x86 build tools
+     (VS 2022 = v143、VS 2026 = v144)
+   - Windows 11 SDK (**10.0.26100 以上推奨**。22621 系でもビルドは
+     通るが、Rust 1.94 std stdio が要求する `__imp_NtWriteFile` /
+     `__imp_RtlNtStatusToDosError` のリンクは CMake 側で自動的に
+     `ntdll`/`userenv`/`ws2_32`/`dbghelp` を引き込む構成済 —
+     詳細は CHANGELOG の「Windows MSVC 修正」参照)
    - C++ CMake tools for Windows (CMake 3.27 以上を含む)
 4. インストール (~10 GB ダウンロード、~30 分)
 
@@ -78,10 +83,14 @@ git submodule update --init --recursive
 
 ### 3.1 CMake configure
 
-PowerShell から:
+PowerShell から (お使いの VS のジェネレータ名に合わせる):
 
 ```powershell
-cmake -S . -B build-msvc -G "Visual Studio 17 2022" -A x64
+# VS 2026 (推奨、commit c23db4c で実機確認済の組合せ)
+cmake -S . -B build-msvc -G "Visual Studio 18 2026" -A x64
+
+# VS 2022 利用時はジェネレータ名を読み替え
+# cmake -S . -B build-msvc -G "Visual Studio 17 2022" -A x64
 ```
 
 成功時、最後に以下のような行が出る:
@@ -226,7 +235,8 @@ Windows 1.6.0 ビルド報告
 =========================
 日時:        YYYY-MM-DD HH:MM JST
 ホスト:      Windows 11 (バージョン xxx)、x86_64
-コンパイラ:  MSVC v143 (VS 2022 17.x.x)
+SDK:         Windows 11 SDK 10.0.xxxxx
+コンパイラ:  MSVC v14x (VS 2022 17.x.x or VS 2026 18.x.x)
 Rust:        rustc 1.x.y (yyy)
 Build ID:    1.6.0+<sha>
 host_smoke:  3 paths PASS (562/562/924)

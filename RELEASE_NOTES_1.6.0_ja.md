@@ -68,6 +68,28 @@ vs 1.4.0 C++-only ベースライン):
   read-only 表示を `kOfxParamStringIsLabel` から disabled な
   `kOfxParamStringIsSingleLine` に変更 (他 OFX プラグインの慣習に揃え)。
 
+## リリース後の Windows MSVC 修正 (2026-05-08)
+
+クリーンな Windows 11 ホスト上で VS 18 2026 + Windows 11 SDK
+10.0.26100 + Rust 1.94 の組合せで 1.6.0 を再ビルドした際に 3 件の
+regression が露見。すべて MSVC スコープの修正 (`if(MSVC)` /
+`MATCHES "windows-msvc$"` で gated) で、生成される `smooth.ofx` は
+macOS リリースと byte-identical。詳細は [CHANGELOG.md](CHANGELOG.md)
+§「ビルド (macOS リリース後の Windows MSVC 修正)」参照:
+
+- `near` ラムダを `is_near` に改名 (`windef.h` の legacy `near`
+  マクロと衝突して `C2513` でビルド失敗していた)。
+- CMake の cargo 連携が `*-pc-windows-msvc` の `<crate>.lib` を
+  選択するよう分岐 (GNU 系の `lib<crate>.a` を一律使っていて
+  `LNK1181` で失敗していた)。
+- Rust 1.94 の std が必要とする Windows ネイティブ依存
+  (`ntdll`, `userenv`, `ws2_32`, `dbghelp`) を `MSVC` ビルド時のみ
+  CMake にリンクさせる (`LNK1120: 2 unresolved externals` を解消)。
+
+出荷済みの macOS zip (`smooth-1.6.0-macos-{arm64,x86_64}.zip`) は
+本修正以前にカット済みで影響なし。Windows / Linux zip 出荷時には
+本修正が自動的に取り込まれる。
+
 ## 配布
 
 アーキ別シングルアーキ zip、アドホック署名済み (notarization 未実施 —

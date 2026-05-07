@@ -75,6 +75,27 @@ crate gains an OFX-flavour 16bpc max value.
   which is the convention other OFX plugins use for build / version
   rows.
 
+## Post-release Windows MSVC fixes (2026-05-08)
+
+Three regressions were uncovered when re-cutting 1.6.0 on a clean
+Windows 11 host with VS 18 2026 + Windows 11 SDK 10.0.26100 + Rust
+1.94. All fixes are MSVC-scoped (gated by `if(MSVC)` /
+`MATCHES "windows-msvc$"`) and the resulting `smooth.ofx` is byte-
+identical to the macOS release. See [CHANGELOG.md](CHANGELOG.md) §
+"Build (post-macOS-release Windows fixes)" for details:
+
+- `near` lambda renamed to `is_near` (collided with `windef.h`'s
+  legacy `near` macro; built `C2513`).
+- CMake glue now picks `<crate>.lib` on `*-pc-windows-msvc` instead
+  of the GNU-flavour `lib<crate>.a` (was failing with `LNK1181`).
+- Rust 1.94 std on Windows requires `ntdll`, `userenv`, `ws2_32`,
+  `dbghelp` as native deps; CMake now links them when `MSVC` is
+  detected (was failing with `LNK1120: 2 unresolved externals`).
+
+The shipping macOS zips (`smooth-1.6.0-macos-{arm64,x86_64}.zip`) were
+cut before this work and are not affected. Windows / Linux zips, when
+they ship, will pick up these fixes automatically.
+
 ## Distribution
 
 Per-architecture single-arch zips, ad hoc signed (no notarization yet —
