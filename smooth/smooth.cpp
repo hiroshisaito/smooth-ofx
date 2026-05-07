@@ -188,12 +188,14 @@ template <> inline bool isWhitePixel<OfxRGBAColourB>(const OfxRGBAColourB &p) {
     return p.r == 0xFF && p.g == 0xFF && p.b == 0xFF;
 }
 template <> inline bool isWhitePixel<OfxRGBAColourS>(const OfxRGBAColourS &p) {
-    auto near = [](unsigned int target, unsigned int v, unsigned int tol) {
+    // `near` is a legacy Windows SDK macro (windef.h) that the MSVC preprocessor
+    // strips; using it as an identifier here would produce C2513.
+    auto is_near = [](unsigned int target, unsigned int v, unsigned int tol) {
         return (v + tol >= target) && (v <= target + tol);
     };
     constexpr unsigned int TOL = 0x0100;
-    bool near_full = near(0xFFFF, p.r, TOL) && near(0xFFFF, p.g, TOL) && near(0xFFFF, p.b, TOL);
-    bool near_half = near(0x8000, p.r, TOL) && near(0x8000, p.g, TOL) && near(0x8000, p.b, TOL);
+    bool near_full = is_near(0xFFFF, p.r, TOL) && is_near(0xFFFF, p.g, TOL) && is_near(0xFFFF, p.b, TOL);
+    bool near_half = is_near(0x8000, p.r, TOL) && is_near(0x8000, p.g, TOL) && is_near(0x8000, p.b, TOL);
     return near_full || near_half;
 }
 template <> inline bool isWhitePixel<OfxRGBAColourF>(const OfxRGBAColourF &p) {
