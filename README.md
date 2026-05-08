@@ -59,7 +59,7 @@ git submodule update --init include/openfx
 
 ## Building
 
-See **[BUILDING.md](BUILDING.md)** for the full cross-platform build
+See **[BUILDING.md](docs/BUILDING.md)** for the full cross-platform build
 guide (macOS / Windows / Linux), including Rust core (`smooth_core`)
 toolchain setup, CMake options, signing, and validation. Quick path:
 

@@ -292,6 +292,6 @@ git submodule update --init --recursive
 ## 8. 参考リンク
 
 - [BUILDING_ja.md](BUILDING_ja.md) — 全プラットフォーム共通リファレンス
-- [CHANGELOG.md](CHANGELOG.md) — 1.6.0 で変わった内容
-- [RELEASE_NOTES_1.6.0_ja.md](RELEASE_NOTES_1.6.0_ja.md) — リリース詳細
-- [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) — 第三者ライセンス
+- [CHANGELOG.md](../CHANGELOG.md) — 1.6.0 で変わった内容
+- [RELEASE_NOTES_1.6.0_ja.md](../RELEASE_NOTES_1.6.0_ja.md) — リリース詳細
+- [THIRD_PARTY_LICENSES.md](../THIRD_PARTY_LICENSES.md) — 第三者ライセンス

@@ -51,8 +51,8 @@ gets an OFX-flavour 16bpc max value.
 
 ### Documentation
 
-- New cross-platform build guide: [BUILDING.md](BUILDING.md) /
-  [BUILDING_ja.md](BUILDING_ja.md). Covers macOS / Windows / Linux,
+- New cross-platform build guide: [BUILDING.md](docs/BUILDING.md) /
+  [BUILDING_ja.md](docs/BUILDING_ja.md). Covers macOS / Windows / Linux,
   Rust toolchain prerequisites, signing, validation, and a
   troubleshooting section. The README's build sections are reduced
   to a quick-start that defers to BUILDING for detail.

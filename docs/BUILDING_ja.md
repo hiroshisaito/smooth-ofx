@@ -371,7 +371,7 @@ GPU アクセラレーション経路は wgpu crate (`rust/smooth_gpu/`) で
 - **Windows MSVC `*.lib` ファイル名ギャップ**: smooth_core 側の
   CMake は commit `0a42112` で `*-pc-windows-msvc` の `<crate>.lib`
   を選択する分岐を追加済 (GNU 系 `lib<crate>.a` ではない)。一方
-  smooth_gpu 側 ([CMakeLists.txt:331](CMakeLists.txt)) は依然
+  smooth_gpu 側 ([CMakeLists.txt:331](../CMakeLists.txt)) は依然
   `libsmooth_gpu.a` を決め打ちしており未対応。Windows MSVC で
   `USE_GPU_CORE=ON` をビルドしようとすると、smooth_core 修正前と同じ
   `LNK1181: cannot open input file libsmooth_gpu.a` で停止する。

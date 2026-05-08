@@ -25,7 +25,7 @@
   (`+dirty` フラグ付き) + Rust core の build id が表示され、UAT 中に
   どのビルドが入っているかを一目で判別可能に。
 - **クロスプラットフォーム ビルドドキュメント**。トップレベルに
-  [BUILDING.md](BUILDING.md) / [BUILDING_ja.md](BUILDING_ja.md) を
+  [BUILDING.md](docs/BUILDING.md) / [BUILDING_ja.md](docs/BUILDING_ja.md) を
   新設、macOS arm64 + x86_64 / Windows MSVC / Linux を 1 ファイルで
   網羅。署名、検証、トラブルシューティングまでカバー。README の
   ビルド節はクイックスタートに整理し詳細は BUILDING へ誘導。
@@ -112,7 +112,7 @@ sudo bash -c 'rm -rf /Library/OFX/Plugins/smooth.ofx.bundle && cp -R /path/to/sm
 macOS zip / Windows zip / Linux tarball には `smooth.ofx.bundle` +
 アーキ別 `README.txt` + 共通 `RELEASE-NOTES.txt` を同梱。
 SHA-256 digest は `*.sha256` で併記。プラットフォーム別ビルド手順の
-詳細は [BUILDING.md](BUILDING.md) (§ 3.3 Windows MSVC、§ 3.5 Linux、
+詳細は [BUILDING.md](docs/BUILDING.md) (§ 3.3 Windows MSVC、§ 3.5 Linux、
 § 10 に CI スケッチ)。
 
 ## 実験的機能: GPU プロトタイプ (`USE_GPU_CORE`、デフォルト OFF)

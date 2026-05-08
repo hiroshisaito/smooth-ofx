@@ -57,7 +57,7 @@ git submodule update --init include/openfx
 ## ビルド
 
 クロスプラットフォーム (macOS / Windows / Linux) の詳細手順は
-**[BUILDING_ja.md](BUILDING_ja.md)** を参照してください — Rust core
+**[BUILDING_ja.md](docs/BUILDING_ja.md)** を参照してください — Rust core
 (`smooth_core`) のセットアップ、CMake オプション、署名、検証を網羅
 しています。クイックスタート:
 

@@ -375,7 +375,7 @@ things to watch when the Windows / Linux machines pick up the work:
 - **Windows MSVC `*.lib` filename gap**: the smooth_core CMake glue
   was updated in commit `0a42112` to pick `<crate>.lib` on
   `*-pc-windows-msvc` (vs. the GNU-flavour `lib<crate>.a`). The
-  parallel smooth_gpu code at [CMakeLists.txt:331](CMakeLists.txt)
+  parallel smooth_gpu code at [CMakeLists.txt:331](../CMakeLists.txt)
   still hard-codes `libsmooth_gpu.a` and has not been updated.
   Building the GPU prototype on Windows MSVC will hit
   `LNK1181: cannot open input file libsmooth_gpu.a` until the same

@@ -25,7 +25,7 @@ hosts at 1080p / 4K (8-bit and 32-bit float paths)
   (with `+dirty` flag) + the Rust core build identity, so operators can
   confirm at a glance which build is loaded during UAT.
 - **Cross-platform build documentation**. New top-level
-  [BUILDING.md](BUILDING.md) / [BUILDING_ja.md](BUILDING_ja.md) gives
+  [BUILDING.md](docs/BUILDING.md) / [BUILDING_ja.md](docs/BUILDING_ja.md) gives
   a single document covering macOS arm64 + x86_64, Windows MSVC, and
   Linux, including signing, validation, and troubleshooting. The
   README's build sections are now a quick-start that links to BUILDING.
@@ -120,7 +120,7 @@ sudo bash -c 'rm -rf /Library/OFX/Plugins/smooth.ofx.bundle && cp -R /path/to/sm
 Each macOS zip / Windows zip / Linux tarball ships `smooth.ofx.bundle` +
 a per-arch `README.txt` + the shared `RELEASE-NOTES.txt`. SHA-256
 digests are alongside as `*.sha256`. Per-platform build recipes are in
-[BUILDING.md](BUILDING.md) (§ 3.3 Windows MSVC, § 3.5 Linux; § 10 for a
+[BUILDING.md](docs/BUILDING.md) (§ 3.3 Windows MSVC, § 3.5 Linux; § 10 for a
 CI sketch).
 
 ## Experimental: GPU prototype (`USE_GPU_CORE`, opt-in)

@@ -271,6 +271,6 @@ Notes:        <if any>
 ## 8. Pointers
 
 - [BUILDING.md](BUILDING.md) — cross-platform reference
-- [CHANGELOG.md](CHANGELOG.md) — what changed in 1.6.0
-- [RELEASE_NOTES_1.6.0.md](RELEASE_NOTES_1.6.0.md) — release notes
-- [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) — license inventory
+- [CHANGELOG.md](../CHANGELOG.md) — what changed in 1.6.0
+- [RELEASE_NOTES_1.6.0.md](../RELEASE_NOTES_1.6.0.md) — release notes
+- [THIRD_PARTY_LICENSES.md](../THIRD_PARTY_LICENSES.md) — license inventory

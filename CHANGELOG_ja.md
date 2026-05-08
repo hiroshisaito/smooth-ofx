@@ -52,8 +52,8 @@ OFX flavor の 16bpc max を追加してから対応予定。
 
 ### ドキュメント (Documentation)
 
-- クロスプラットフォーム ビルドガイドを新設: [BUILDING.md](BUILDING.md) /
-  [BUILDING_ja.md](BUILDING_ja.md)。macOS / Windows / Linux 各 OS の
+- クロスプラットフォーム ビルドガイドを新設: [BUILDING.md](docs/BUILDING.md) /
+  [BUILDING_ja.md](docs/BUILDING_ja.md)。macOS / Windows / Linux 各 OS の
   ツールチェーン要件、Rust toolchain 前提、配布署名、検証手順、
   トラブルシューティングまで網羅。README のビルド節はクイック
   スタートに整理し、詳細は BUILDING に誘導する構成に変更。
