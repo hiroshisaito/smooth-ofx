@@ -262,8 +262,10 @@ git submodule update --init --recursive
 ```
 
 ### `cargo build` runs for a long time
-→ First build compiles wgpu/rayon/etc. crate-by-crate (1–2 minutes).
-  Subsequent builds are seconds.
+→ The shipping path (`USE_RUST_CORE=ON`) compiles rayon and its
+  transitive deps crate-by-crate on the first run (1–2 minutes).
+  Adding `USE_GPU_CORE=ON` pulls the full wgpu tree on top of that
+  (4–5 minutes). Subsequent builds are seconds.
 
 ### Resolve / Natron doesn't show Smooth
 1. Bundle present at `/usr/OFX/Plugins/smooth.ofx.bundle/Contents/Linux-x86-64/smooth.ofx`?

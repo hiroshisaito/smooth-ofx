@@ -27,7 +27,10 @@ Fusion and other OFX-compliant hosts.
 
 - **macOS 11+** — `arm64` (Apple Silicon) and `x86_64` (Intel) are shipped
   as separate single-architecture builds
-- **Windows 10+ (x64)** — MSVC 2019+ or MSYS2 MinGW-w64
+- **Windows 10/11 (x64)** — built with Visual Studio 2022/2026 (MSVC); MinGW-w64
+  is also supported
+- **Linux x86-64** — RHEL-9 family (Rocky Linux 9.5 / AlmaLinux 9 / Oracle
+  Linux 9), glibc 2.34+, gcc 11.5+
 
 ## Repository layout
 
@@ -89,6 +92,7 @@ Copy the built bundle / DLL to the host's OFX plugin directory.
 
 - **macOS**: `/Library/OFX/Plugins/smooth.ofx.bundle/`
 - **Windows**: `C:\Program Files\Common Files\OFX\Plugins\smooth.ofx.bundle\Contents\Win64\smooth.ofx`
+- **Linux**: `/usr/OFX/Plugins/smooth.ofx.bundle/Contents/Linux-x86-64/smooth.ofx` (or the host's dedicated plugin directory, e.g. Resolve's `/var/BlackmagicDesign/DaVinci Resolve/Support/OFX/Plugins/`)
 
 Restart the OFX host. The effect appears under **Effects → Filters → Smooth**.
 

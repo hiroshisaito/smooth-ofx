@@ -14,7 +14,7 @@ the C++ baseline only, pass `-DUSE_RUST_CORE=OFF`.
 
 | Component | macOS                              | Windows (production)        | Windows (dev)                 | Linux                          |
 |-----------|------------------------------------|-----------------------------|-------------------------------|--------------------------------|
-| C++       | Xcode CLT or Xcode (AppleClang)    | MSVC 2019+ (VS 17 / 18)     | MSYS2 MinGW-w64 g++ 12+       | gcc 9+ or clang 12+            |
+| C++       | Xcode CLT or Xcode (AppleClang)    | MSVC (Visual Studio 2022 / 2026 = VS 17 / VS 18) | MSYS2 MinGW-w64 g++ 12+       | gcc 9+ or clang 12+            |
 | CMake     | 3.20+                              | 3.20+                       | 3.20+                         | 3.20+                          |
 | Generator | Unix Makefiles / Ninja             | "Visual Studio 17/18 …"     | Ninja or MSYS Makefiles       | Unix Makefiles / Ninja         |
 | Rust      | rustup (stable)                    | rustup (stable + MSVC)      | n/a (use `-DUSE_RUST_CORE=OFF`) | rustup (stable) or distro Rust |
@@ -210,17 +210,19 @@ cmake --build build-linux
 
 Output: `build-linux/smooth.ofx`
 
-Distribution layout:
+Distribution layout (per the OFX spec — `Info.plist` is macOS-only and
+is not included in Linux bundles):
 
 ```
 smooth.ofx.bundle/
 └── Contents/
-    ├── Info.plist
     └── Linux-x86-64/smooth.ofx
 ```
 
 Linux OFX hosts (Natron, Resolve Linux Studio) typically don't require
-signing. Ship the bundle as a tarball or distro package.
+signing. Ship the bundle as a tarball or distro package. Full
+step-by-step recipe is in
+[BUILD_HANDOFF_LINUX.md](BUILD_HANDOFF_LINUX.md).
 
 ## 4. CMake options reference
 

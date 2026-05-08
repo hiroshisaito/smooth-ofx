@@ -2,9 +2,11 @@ smooth OFX plugin — Release Notes
 =================================
 
 Version      : 1.6.0
-Release date : 2026-05-05
-Platforms    : macOS arm64 (Apple Silicon), macOS x86_64 (Intel), Windows x64
-Signed       : Ad hoc on macOS, NOT notarized (test distribution build)
+Release date : 2026-05-05 (macOS), 2026-05-08 (Windows / Linux)
+Platforms    : macOS arm64 (Apple Silicon), macOS x86_64 (Intel),
+               Windows x64, Linux x86-64 (RHEL-9 family, glibc 2.34+)
+Signed       : Ad hoc on macOS, NOT notarized; Windows / Linux unsigned
+               (Linux OFX hosts do not require code signing)
 
 This release aligns the OFX-port version line with the AE-side fork
 hiroshisaito/smooth v1.6.0. There were no OFX 1.5.x releases (the
@@ -21,35 +23,51 @@ Highlights vs 1.4.0:
     version + git short SHA + Rust core build id, so UAT can confirm
     at a glance which build is loaded.
 
-Initial OpenFX port of the "smooth" plugin, originally released by LOILO Inc.
-as an After Effects plugin. Verified on DaVinci Resolve on both Windows and
-macOS.
+OpenFX port of the "smooth" plugin, originally released by LOILO Inc.
+as an After Effects plugin. Verified on DaVinci Resolve on macOS, Windows,
+and Linux (host_smoke reports the canonical pure0=562 / pureMax=562 /
+intermediate=924 across all three pixel depths on every platform).
 
 
-Release artifacts (macOS)
--------------------------
+Release artifacts
+-----------------
 
-Per-architecture builds are shipped separately; pick the one that matches
-the Mac you install on:
+Per-platform single-arch builds; pick the one that matches your host:
 
   * smooth-1.6.0-macos-arm64.zip    — Apple Silicon (M1 / M2 / M3 / M4 …)
   * smooth-1.6.0-macos-x86_64.zip   — Intel Macs
+  * smooth-1.6.0-windows-x64.zip    — Windows 10 / 11 x64
+                                      (built with VS 18 2026 + Rust 1.94)
+  * smooth-1.6.0-linux-x86-64.tar.gz — RHEL-9 family x86_64
+                                      (Rocky Linux 9.5, glibc 2.34+)
 
-Each archive contains smooth.ofx.bundle (single-arch), README.txt, and
-RELEASE-NOTES.txt.
+Each archive contains smooth.ofx.bundle (single-arch), a per-platform
+README.txt, and this RELEASE-NOTES.txt.
 
-SHA-256 digests are provided alongside each zip as .zip.sha256 files.
+SHA-256 digests are provided alongside each archive as .sha256 files.
 
 
-Install (macOS)
----------------
+Install
+-------
 
-See the README.txt bundled inside the archive for step-by-step instructions.
+See the per-platform README.txt bundled inside each archive for
+step-by-step instructions.
 
-Summary:
+macOS (summary):
   1. Unzip, copy smooth.ofx.bundle to /Library/OFX/Plugins/
   2. sudo xattr -dr com.apple.quarantine /Library/OFX/Plugins/smooth.ofx.bundle
   3. Restart DaVinci Resolve -> Effects -> Filters -> Smooth
+
+Windows (summary):
+  1. Unzip, copy smooth.ofx.bundle to
+     C:\Program Files\Common Files\OFX\Plugins\
+  2. Restart DaVinci Resolve -> Effects -> Filters -> Smooth
+
+Linux (summary):
+  1. Untar, copy smooth.ofx.bundle to /usr/OFX/Plugins/ (or the host's
+     dedicated plugin directory, e.g. Resolve's
+     /var/BlackmagicDesign/DaVinci Resolve/Support/OFX/Plugins/)
+  2. Restart DaVinci Resolve -> Effects -> Filters -> Smooth
 
 
 What was in 1.4.0 (carried into 1.6.0)
@@ -96,6 +114,8 @@ Checksums
 
   * dist/smooth-1.6.0-macos-arm64.zip.sha256
   * dist/smooth-1.6.0-macos-x86_64.zip.sha256
+  * dist/smooth-1.6.0-windows-x64.zip.sha256
+  * dist/smooth-1.6.0-linux-x86-64.tar.gz.sha256
 
 
 License and acknowledgments

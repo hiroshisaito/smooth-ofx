@@ -6,7 +6,8 @@
 **Upstream alignment**: AE-side fork
 [hiroshisaito/smooth](https://github.com/hiroshisaito/smooth) v1.6.0
 **Output compatibility**: byte-identical to 1.4.0 across all three pixel
-depths (verified via `host_smoke` PPM cmp on macOS / Windows)
+depths (verified via `host_smoke` PPM cmp on macOS / Windows / Linux —
+all three paths report `pure0=562 pureMax=562 intermediate=924 / 2048`)
 **Production performance**: 2.5×–3.1× faster than 1.4.0 on multi-core
 hosts at 1080p / 4K (8-bit and 32-bit float paths)
 
@@ -93,28 +94,34 @@ identical to the macOS release. See [CHANGELOG.md](CHANGELOG.md) §
   detected (was failing with `LNK1120: 2 unresolved externals`).
 
 The shipping macOS zips (`smooth-1.6.0-macos-{arm64,x86_64}.zip`) were
-cut before this work and are not affected. Windows / Linux zips, when
-they ship, will pick up these fixes automatically.
+cut before this work and are not affected. The Windows zip and Linux
+tarball (cut after these fixes) include them automatically.
 
 ## Distribution
 
-Per-architecture single-arch zips, ad hoc signed (no notarization yet —
-clear quarantine before loading):
+Per-platform single-arch artefacts. macOS only is ad hoc signed
+(no notarization yet — clear quarantine before loading); Windows and
+Linux are unsigned (Linux OFX hosts do not generally require code
+signing):
 
 - `dist/smooth-1.6.0-macos-arm64.zip` — Apple Silicon
 - `dist/smooth-1.6.0-macos-x86_64.zip` — Intel
-- Windows / Linux builds are queued for separate post-macOS work; see
-  [BUILDING.md](BUILDING.md) for the platform-specific recipes
-  (§ 3.3 Windows MSVC, § 3.5 Linux) and § 10 for a CI sketch.
+- `dist/smooth-1.6.0-windows-x64.zip` — Windows 10/11 x64
+  (built with VS 18 2026 + Rust 1.94; see "Post-release Windows MSVC
+  fixes" above)
+- `dist/smooth-1.6.0-linux-x86-64.tar.gz` — Rocky Linux 9.5 / RHEL-9
+  family x86_64 (gcc 11.5 + Rust 1.95, glibc 2.34+)
 
 ```bash
 # Install (macOS Intel example; replace with -arm64 on Apple Silicon)
 sudo bash -c 'rm -rf /Library/OFX/Plugins/smooth.ofx.bundle && cp -R /path/to/smooth.ofx.bundle /Library/OFX/Plugins/ && xattr -dr com.apple.quarantine /Library/OFX/Plugins/smooth.ofx.bundle'
 ```
 
-Each archive ships `smooth.ofx.bundle` + a per-arch `README.txt` + the
-shared `RELEASE-NOTES.txt`. SHA-256 digests are alongside as
-`*.zip.sha256`.
+Each macOS zip / Windows zip / Linux tarball ships `smooth.ofx.bundle` +
+a per-arch `README.txt` + the shared `RELEASE-NOTES.txt`. SHA-256
+digests are alongside as `*.sha256`. Per-platform build recipes are in
+[BUILDING.md](BUILDING.md) (§ 3.3 Windows MSVC, § 3.5 Linux; § 10 for a
+CI sketch).
 
 ## Experimental: GPU prototype (`USE_GPU_CORE`, opt-in)
 

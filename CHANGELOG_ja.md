@@ -118,7 +118,8 @@ intermediate=924 / 2048`)。
   `otool -L` は引き続き `libc++` / `libSystem` のみ。GPU プロトタイプ
   ビルドはさらに ~1.3 MB 増加し、macOS では Metal / MetalKit /
   QuartzCore / Foundation framework もリンクされる。
-- 配布 zip の名前は `smooth-1.4.0-*` → `smooth-1.6.0-*` に変更。
+- 配布物の名称は `smooth-1.4.0-*` → `smooth-1.6.0-*` に変更
+  (macOS / Windows は `.zip`、Linux は `.tar.gz`)。
 
 ## 1.4.0 — 2026-04-20
 

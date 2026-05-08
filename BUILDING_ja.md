@@ -15,7 +15,7 @@ rayon で並列化する Rust core (`smooth_core`) 統合を含みます。
 
 | 項目 | macOS | Windows (本番) | Windows (開発) | Linux |
 |---|---|---|---|---|
-| C++ コンパイラ | Xcode CLT または Xcode (AppleClang) | MSVC 2019 以降 (VS 17 / 18) | MSYS2 MinGW-w64 g++ 12+ | gcc 9+ または clang 12+ |
+| C++ コンパイラ | Xcode CLT または Xcode (AppleClang) | MSVC (Visual Studio 2022 / 2026 = VS 17 / VS 18) | MSYS2 MinGW-w64 g++ 12+ | gcc 9+ または clang 12+ |
 | CMake | 3.20 以上 | 3.20 以上 | 3.20 以上 | 3.20 以上 |
 | Generator | Unix Makefiles / Ninja | "Visual Studio 17/18 …" | Ninja または MSYS Makefiles | Unix Makefiles / Ninja |
 | Rust | rustup (stable) | rustup (stable + MSVC) | 不要 (`-DUSE_RUST_CORE=OFF` 推奨) | rustup (stable) または ディストリビューション Rust |
@@ -209,17 +209,18 @@ cmake --build build-linux
 
 出力: `build-linux/smooth.ofx`
 
-配布構造:
+配布構造 (OFX 仕様 — `Info.plist` は macOS 専用、Linux バンドルには
+含めない):
 
 ```
 smooth.ofx.bundle/
 └── Contents/
-    ├── Info.plist
     └── Linux-x86-64/smooth.ofx
 ```
 
 Linux OFX ホスト (Natron、Resolve Linux Studio) は通常署名不要です。
-tarball もしくは distro パッケージとして配布してください。
+tarball もしくは distro パッケージとして配布してください。詳細手順は
+[BUILD_HANDOFF_LINUX_ja.md](BUILD_HANDOFF_LINUX_ja.md) を参照。
 
 ## 4. CMake オプション一覧
 

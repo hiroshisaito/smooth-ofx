@@ -24,7 +24,10 @@ Fusion など OFX 対応ホストで利用できるようにしました。
 
 - **macOS 11 以降** — `arm64` (Apple Silicon) と `x86_64` (Intel) の
   アーキテクチャ別シングルアーキビルドを個別に配布
-- **Windows 10 以降 (x64)** — MSVC 2019+ もしくは MSYS2 MinGW-w64
+- **Windows 10 / 11 (x64)** — Visual Studio 2022 / 2026 (MSVC) でビルド。
+  MinGW-w64 もサポート
+- **Linux x86-64** — RHEL-9 系 (Rocky Linux 9.5 / AlmaLinux 9 /
+  Oracle Linux 9)、glibc 2.34 以上、gcc 11.5 以上
 
 ## リポジトリ構成
 
@@ -86,6 +89,7 @@ Rust toolchain が無い環境や MSYS2 MinGW 開発経路では
 
 - **macOS**: `/Library/OFX/Plugins/smooth.ofx.bundle/`
 - **Windows**: `C:\Program Files\Common Files\OFX\Plugins\smooth.ofx.bundle\Contents\Win64\smooth.ofx`
+- **Linux**: `/usr/OFX/Plugins/smooth.ofx.bundle/Contents/Linux-x86-64/smooth.ofx` (または Resolve 専用パス `/var/BlackmagicDesign/DaVinci Resolve/Support/OFX/Plugins/` など、ホストごとの専用ディレクトリ)
 
 OFX ホスト (DaVinci Resolve / Fusion など) を再起動すると、
 **Effects → Filters → Smooth** にプラグインが現れます。

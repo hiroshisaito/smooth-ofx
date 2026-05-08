@@ -125,7 +125,8 @@ intermediate=924 / 2048` across 8/16/float in `host_smoke`).
   `libSystem`. The optional GPU prototype build adds a further
   ~1.3 MB and pulls in Metal / MetalKit / QuartzCore / Foundation
   on macOS.
-- Distribution zips renamed from `smooth-1.4.0-*` to `smooth-1.6.0-*`.
+- Distribution archives renamed from `smooth-1.4.0-*` to `smooth-1.6.0-*`
+  (macOS / Windows ship as `.zip`; Linux ships as `.tar.gz`).
 
 ## 1.4.0 — 2026-04-20
 

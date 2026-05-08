@@ -21,8 +21,12 @@ This inventory was verified on 2026-05-07 from:
 - `cargo tree --locked --manifest-path rust/smooth_gpu/Cargo.toml
    --target x86_64-apple-darwin --edges normal,no-proc-macro`
 
-Both macOS arm64 and x86_64 link the same dependency set; the Windows and
-Linux runtime dep sets will be added when those targets ship.
+All four shipping targets — macOS arm64, macOS x86_64, Windows x64, and
+Linux x86-64 — link the same `smooth_core` Rust crate set (Cargo.lock is
+shared across targets). The macOS / Windows / Linux platform-specific
+runtime libraries (system `libc++` / `libSystem` on macOS, MSVC CRT +
+`ntdll` / `userenv` / `ws2_32` / `dbghelp` on Windows, glibc + libstdc++
+on Linux) are part of the host OS, not redistributed by this project.
 
 ## Apache-2.0 Compatibility Summary
 
@@ -89,8 +93,10 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ## 2. CPU Rust Core — `smooth_core` (shipping default, `USE_RUST_CORE=ON`)
 
-These crates are linked into the production plugin binaries
-(`dist/smooth-1.6.0-macos-{arm64,x86_64}.zip`). License expressions are
+These crates are linked into the production plugin binaries on every
+shipping target — `dist/smooth-1.6.0-macos-{arm64,x86_64}.zip`,
+`dist/smooth-1.6.0-windows-x64.zip`, and
+`dist/smooth-1.6.0-linux-x86-64.tar.gz`. License expressions are
 taken from each Cargo package's metadata. This list mirrors the upstream
 `smooth-ae/THIRD_PARTY_LICENSES.md`; refer to that file for the proc-macro
 and build-script crates that are not linked into the plugin binary.

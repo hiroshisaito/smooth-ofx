@@ -6,7 +6,8 @@
 **Upstream**: AE 側 fork
 [hiroshisaito/smooth](https://github.com/hiroshisaito/smooth) v1.6.0
 **出力互換性**: 全 3 ピクセル深度で 1.4.0 と byte-identical
-(`host_smoke` + PPM cmp で macOS / Windows 検証済)
+(`host_smoke` + PPM cmp で macOS / Windows / Linux 検証済 —
+3 経路すべてで `pure0=562 pureMax=562 intermediate=924 / 2048`)
 **本番性能**: マルチコアホストの 1080p / 4K で 1.4.0 比 **2.5×–3.1× 高速化**
 (8-bit / 32-bit float 経路)
 
@@ -92,22 +93,27 @@ macOS リリースと byte-identical。詳細は [CHANGELOG.md](CHANGELOG.md)
 
 ## 配布
 
-アーキ別シングルアーキ zip、アドホック署名済み (notarization 未実施 —
-ロード前に quarantine 属性を除去してください):
+各プラットフォーム別シングルアーキ配布物。macOS のみアドホック署名済み
+(notarization 未実施 — ロード前に quarantine 属性を除去してください)、
+Windows / Linux は無署名 (Linux ホストは通常コード署名を要求しない):
 
 - `dist/smooth-1.6.0-macos-arm64.zip` — Apple Silicon
 - `dist/smooth-1.6.0-macos-x86_64.zip` — Intel
-- Windows / Linux ビルドは macOS リリース後の別タスク。
-  [BUILDING.md](BUILDING.md) のプラットフォーム別レシピを参照
-  (§ 3.3 Windows MSVC、§ 3.5 Linux、§ 10 に CI スケッチ)。
+- `dist/smooth-1.6.0-windows-x64.zip` — Windows 10/11 x64
+  (VS 18 2026 + Rust 1.94 でビルド、§「リリース後の Windows MSVC 修正」参照)
+- `dist/smooth-1.6.0-linux-x86-64.tar.gz` — Rocky Linux 9.5 / RHEL-9 系 x86_64
+  (gcc 11.5 + Rust 1.95、glibc 2.34+)
 
 ```bash
 # インストール (macOS Intel 例、Apple Silicon は -arm64 に置換)
 sudo bash -c 'rm -rf /Library/OFX/Plugins/smooth.ofx.bundle && cp -R /path/to/smooth.ofx.bundle /Library/OFX/Plugins/ && xattr -dr com.apple.quarantine /Library/OFX/Plugins/smooth.ofx.bundle'
 ```
 
-各 zip には `smooth.ofx.bundle` + アーキ別 `README.txt` + 共通
-`RELEASE-NOTES.txt` を同梱。SHA-256 digest は `*.zip.sha256` で併記。
+macOS zip / Windows zip / Linux tarball には `smooth.ofx.bundle` +
+アーキ別 `README.txt` + 共通 `RELEASE-NOTES.txt` を同梱。
+SHA-256 digest は `*.sha256` で併記。プラットフォーム別ビルド手順の
+詳細は [BUILDING.md](BUILDING.md) (§ 3.3 Windows MSVC、§ 3.5 Linux、
+§ 10 に CI スケッチ)。
 
 ## 実験的機能: GPU プロトタイプ (`USE_GPU_CORE`、デフォルト OFF)
 
