@@ -3,6 +3,7 @@
 
 # ビルド成果物
 /build/
+/build-linux*/
 /build-macos*/
 /build-mingw/
 /build-msvc/
