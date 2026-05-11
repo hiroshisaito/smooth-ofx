@@ -48,7 +48,7 @@ DaVinci Resolve / Natron 等を再起動 → **Effects → Filters → Smooth**�
 ## 詳細ドキュメント
 
 - [CHANGELOG.md](https://github.com/hiroshisaito/smooth-ofx/blob/v1.6.0/CHANGELOG.md) — 完全な変更点
-- [RELEASE_NOTES_1.6.0.md](https://github.com/hiroshisaito/smooth-ofx/blob/v1.6.0/RELEASE_NOTES_1.6.0.md) — 技術詳細・性能ベンチマーク・GPU プロトタイプ説明
+- [RELEASE_NOTES_1.6.0.md](https://github.com/hiroshisaito/smooth-ofx/blob/v1.6.0/RELEASE_NOTES_1.6.0.md) — 技術詳細・性能ベンチマーク
 - [BUILDING.md](https://github.com/hiroshisaito/smooth-ofx/blob/v1.6.0/BUILDING.md) — クロスプラットフォームビルド手順
 - [THIRD_PARTY_LICENSES.md](https://github.com/hiroshisaito/smooth-ofx/blob/v1.6.0/THIRD_PARTY_LICENSES.md) — 第三者ライセンス
 
@@ -58,7 +58,6 @@ DaVinci Resolve / Natron 等を再起動 → **Effects → Filters → Smooth**�
 
 - Tile rendering 非対応 (`kOfxImageEffectPropSupportsTiles = 0`)
 - Multi-resolution / proxy rendering 未検証
-- GPU レンダーパス非実装 (CPU のみ)。`USE_GPU_CORE` プロトタイプは出荷経路より遅いため出荷バイナリには含めず
 - 16-bit 整数経路は引き続き C++ ベースライン (Rust の `Pixel16` max-value 規約差異対応待ち)
 
 ## 謝辞

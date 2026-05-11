@@ -101,7 +101,6 @@ Known limitations
 
   * Tile rendering is not supported.
   * Multi-resolution / proxy rendering is not verified.
-  * GPU render path is not implemented (CPU only).
   * macOS release zips are ad hoc signed but NOT notarized. Gatekeeper
     may still block first load. Remove the quarantine attribute before
     loading:

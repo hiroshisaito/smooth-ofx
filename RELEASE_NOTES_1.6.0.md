@@ -65,8 +65,7 @@ crate gains an OFX-flavour 16bpc max value.
 - **Transparent option not detecting white in 16-bit / float color
   spaces**. The white-key check now accepts `0xFFFF` *and* `0x8000`
   for 16-bit (covering both OFX and AE conventions) and uses a
-  `|v − 1.0| < 0.005` tolerance for float. Snap-to-1.0 happens for
-  the GPU prototype path before the kernel runs.
+  `|v − 1.0| < 0.005` tolerance for float.
 - **Range slider had no visible effect** at typical slider positions.
   The slider's display max widened from 10 to 100 so the full
   effective threshold is reachable.
@@ -120,41 +119,8 @@ sudo bash -c 'rm -rf /Library/OFX/Plugins/smooth.ofx.bundle && cp -R /path/to/sm
 Each macOS zip / Windows zip / Linux tarball ships `smooth.ofx.bundle` +
 a per-arch `README.txt` + the shared `RELEASE-NOTES.txt`. SHA-256
 digests are alongside as `*.sha256`. Per-platform build recipes are in
-[BUILDING.md](docs/BUILDING.md) (§ 3.3 Windows MSVC, § 3.5 Linux; § 10 for a
+[BUILDING.md](docs/BUILDING.md) (§ 3.3 Windows MSVC, § 3.5 Linux; § 9 for a
 CI sketch).
-
-## Experimental: GPU prototype (`USE_GPU_CORE`, opt-in)
-
-A `smooth_gpu` crate has been added under `rust/smooth_gpu/` as a
-prototype for cross-platform GPU acceleration via [wgpu](https://wgpu.rs).
-**Not built by default; not in the distributed binaries.**
-
-- Build with `-DUSE_GPU_CORE=ON -DUSE_RUST_CORE=OFF` (the two are
-  mutually exclusive at link time today; see BUILDING § 9 for the
-  Rust-runtime duplicate-symbol explanation).
-- WGSL kernels for `preprocess` (both AE and OFX byte layouts),
-  `mode_flg` detection, and `link8_square` centre handler — each
-  verified byte-identical to a CPU reference.
-- Hybrid render path: 8bpc preprocess on GPU, the rest of the
-  algorithm on the C++ baseline. Toggle on/off at runtime via the
-  new `GPU` checkbox in Effect Controls.
-- `host_smoke` adds `SMOOTH_BENCH_TOGGLE_GPU=1` for side-by-side
-  GPU/CPU bench rows.
-- **The prototype is currently *slower* than the shipping
-  `USE_RUST_CORE=ON` configuration** — by about 22 ms / frame at
-  1080p 8-bit — because the GPU upload/dispatch/readback round-trip
-  outweighs the preprocess kernel's compute density on every-frame
-  CPU↔GPU buffer hand-off. It is checked in as the architectural
-  seam for two follow-up directions:
-  - **(i)** make `smooth_core` emit `rlib` so it can be embedded into
-    `smooth_gpu` and the link-time mutex disappears; then rayon-CPU
-    and GPU kernels can coexist instead of swapping each other out.
-  - **(ii)** wire OFX 1.5 `kOfxImageEffectActionRenderGPU` so the
-    host hands us a GPU buffer directly and the round-trip cost
-    vanishes.
-
-Until one of those lands, the production path stays
-`USE_RUST_CORE=ON, USE_GPU_CORE=OFF`.
 
 ## Versioning
 

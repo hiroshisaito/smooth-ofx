@@ -16,10 +16,7 @@ Fusion and other OFX-compliant hosts.
 - Premultiplied-alpha correct (auto-converted on input and restored on output)
 - Parameters: `range`, `line weight`, `transparent`, plus a read-only
   `build` identity label in the Inspector
-- Shipping path is CPU (Rust core, rayon-parallel). An optional
-  experimental GPU preprocess (wgpu, opt-in via `-DUSE_GPU_CORE=ON`)
-  exposes a `GPU` toggle in the Inspector — see
-  [CHANGELOG.md](CHANGELOG.md) for status
+- CPU implementation only (Rust core, rayon-parallel)
 - No third-party runtime dependencies (OFX headers only); on macOS the
   shipping bundle links only `libc++` and `libSystem`
 

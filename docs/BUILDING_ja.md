@@ -335,63 +335,7 @@ cargo がいずれかの arch の static lib を生成できていない。
 host_smoke とプラグインのアーキテクチャ不一致。両方を同じ
 `CMAKE_OSX_ARCHITECTURES` でビルドする。
 
-## 9. GPU core (`smooth_gpu`) — クロスプラットフォーム申し送り
-
-GPU アクセラレーション経路は wgpu crate (`rust/smooth_gpu/`) で
-プロトタイピング中、2026-05-06 時点で Phase A scaffold 段階です。
-**まだ OFX ビルドには組み込まれておらず**、1.6.0 の出荷経路は
-`USE_RUST_CORE` のみ。Windows / Linux 担当者向けの申し送り事項:
-
-- **バックエンドはビルド時に同梱**: wgpu 23 の default features で
-  Metal (macOS) / DX12 (Windows) / Vulkan (Linux/Windows) が一つの
-  staticlib に統合される。選択は実行時の
-  `wgpu::Backends::PRIMARY` で行われる
-- **静的ライブラリサイズ**: macOS arm64 で `libsmooth_gpu.a` ≈ 9.3 MB
-  (`libsmooth_core.a` の ≈ 5.7 MB に対して)。`smooth_gpu` をリンク
-  すると per-arch の OFX バンドルが約 4–5 MB 大きくなる見込み
-- **Linux ランタイム**: OFX バンドルは Vulkan ローダ / ドライバを
-  **同梱しない**。`smooth_gpu` がアダプタを取得するには、ホスト OS に
-  Vulkan ICD (例: `mesa-vulkan-drivers`、`vulkan-tools`) のインストール
-  が必要。Linux 配布パスが立ち上がるときに `dist/README-linux-*.txt`
-  にインストール時前提として明記すること
-- **Windows ランタイム**: DX12 は OS (Windows 10 以降) 標準。ユーザー
-  側の追加インストール不要。Vulkan ドライバが入っていれば fallback も
-  できるが、依存しない設計で
-- **Rust target triple**: `smooth_core` と同じ — 本ファイル冒頭の表を
-  参照。CI / クロスビルド時はホストごとに `rustup target add` が必要
-- **ヘッドレス CI**: `smooth_gpu` の統合テスト
-  (`init_can_acquire_a_device_on_this_host`) は実 GPU device を取得
-  しに行く。GPU が利用できない Linux runner では
-  `SMOOTH_GPU_SKIP_INIT_TEST=1` でスキップ可能。
-  `smooth_gpu_version()` / `smooth_gpu_build_id()` の単体テストは常に走る
-- **MinGW パス**: `smooth_core` と同じ制約。wgpu は Windows で MSVC
-  シンボルにリンクするため MSYS2 MinGW 開発経路でも `smooth_gpu` は
-  リンク不可。MSVC が検出されない場合は `USE_RUST_CORE` と同様に
-  オフにする想定
-- **Windows MSVC `*.lib` ファイル名ギャップ**: smooth_core 側の
-  CMake は commit `0a42112` で `*-pc-windows-msvc` の `<crate>.lib`
-  を選択する分岐を追加済 (GNU 系 `lib<crate>.a` ではない)。一方
-  smooth_gpu 側 ([CMakeLists.txt:331](../CMakeLists.txt)) は依然
-  `libsmooth_gpu.a` を決め打ちしており未対応。Windows MSVC で
-  `USE_GPU_CORE=ON` をビルドしようとすると、smooth_core 修正前と同じ
-  `LNK1181: cannot open input file libsmooth_gpu.a` で停止する。
-  smooth_core ブロック (211 行目以降) と同じパターンで分岐を入れれば
-  解決可能。出荷経路への影響なし、GPU プロトタイプ有効化希望者向けの
-  follow-up として保留中
-- **`USE_RUST_CORE` と `USE_GPU_CORE` は相互排他**: 両 staticlib に
-  Rust ランタイム (`std::panicking::EMPTY_PANIC`、
-  `_rust_eh_personality` 等) が同梱されているため、同時リンクすると
-  C++ 側のリンク段階で duplicate symbol エラー。CMake は両方 ON で
-  `FATAL_ERROR` を投げる。`smooth_core` は `crate-type` が
-  `staticlib` 限定で `smooth_gpu` に Rust path-dep として埋め込めない
-  (AE 側 submodule の変更が必要)。これが解決するまで
-  `USE_GPU_CORE=ON` 時の CPU フォールバックは C++ ベースライン経路
-  (`USE_RUST_CORE=OFF` と同じ実装)。
-
-実 algorithm kernel が landing したらこの節に「GPU ビルドマトリクス」
-を追記する予定。それまでは申し送り情報として参照のみ。
-
-## 10. クロスプラットフォーム CI スケッチ (将来作業)
+## 9. クロスプラットフォーム CI スケッチ (将来作業)
 
 3 OS をカバーする最小 GitHub Actions マトリクス:
 

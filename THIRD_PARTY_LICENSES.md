@@ -15,11 +15,6 @@ This inventory was verified on 2026-05-07 from:
 - `include/openfx/LICENSE.md` (OpenFX SDK 1.5.1 submodule)
 - The CPU Rust path inventory at `smooth-ae/THIRD_PARTY_LICENSES.md`
   (kept in sync with `smooth-ae/rust/smooth_core/Cargo.lock`)
-- `cargo metadata --locked --manifest-path rust/smooth_gpu/Cargo.toml`
-- `cargo tree --locked --manifest-path rust/smooth_gpu/Cargo.toml
-   --target aarch64-apple-darwin --edges normal,no-proc-macro`
-- `cargo tree --locked --manifest-path rust/smooth_gpu/Cargo.toml
-   --target x86_64-apple-darwin --edges normal,no-proc-macro`
 
 All four shipping targets — macOS arm64, macOS x86_64, Windows x64, and
 Linux x86-64 — link the same `smooth_core` Rust crate set (Cargo.lock is
@@ -43,11 +38,7 @@ Based on this dependency set, smooth-ofx can be distributed as an Apache-2.0
 project, provided the third-party copyright and license notices in this file
 are preserved.
 
-The shipping production binaries (`USE_RUST_CORE=ON`, `USE_GPU_CORE=OFF` —
-the default) and the optional GPU prototype binaries (`USE_GPU_CORE=ON`)
-carry different dep sets; both are documented below.
-
-## 1. OpenFX SDK (header-only, both build configurations)
+## 1. OpenFX SDK (header-only)
 
 The OpenFX 1.5.1 SDK is included as the submodule `include/openfx`. Only the
 header files (`include/openfx/include/*.h`) are required to compile a smooth-
@@ -110,68 +101,7 @@ and build-script crates that are not linked into the plugin binary.
 | rayon           | 1.12.0 | MIT OR Apache-2.0 | rayon-rs project |
 | rayon-core      | 1.13.0 | MIT OR Apache-2.0 | rayon-rs project |
 
-## 3. Optional GPU Prototype — `smooth_gpu` (opt-in, `USE_GPU_CORE=ON`)
-
-The `smooth_gpu` crate (`rust/smooth_gpu/`) is **not built by default and not
-included in the shipping `smooth-1.6.0-macos-*.zip` binaries**. It is only
-relevant when an end user (or a downstream packager) builds with
-`-DUSE_GPU_CORE=ON`. The list below is the full runtime dependency set
-linked into a `USE_GPU_CORE=ON` macOS plugin binary.
-
-The list was generated from
-`cargo tree --locked --target aarch64-apple-darwin --edges normal,no-proc-macro`;
-the x86_64 tree is identical. Future Windows / Linux GPU-prototype builds
-will introduce additional crates (e.g. `ash`, `windows-sys`,
-`gpu-allocator`); those will be appended when those targets are exercised.
-
-| Package | Version | License | Notice holder / project |
-| --- | --- | --- | --- |
-| arrayvec            | 0.7.6        | MIT OR Apache-2.0          | bluss |
-| bit-set             | 0.8.0        | Apache-2.0 OR MIT          | contain-rs |
-| bit-vec             | 0.8.0        | Apache-2.0 OR MIT          | contain-rs |
-| bitflags            | 1.3.2        | MIT OR Apache-2.0          | bitflags-rs |
-| bitflags            | 2.11.1       | MIT OR Apache-2.0          | bitflags-rs |
-| block               | 0.1.6        | MIT                        | Steven Sheldon |
-| bytemuck            | 1.25.0       | Zlib OR Apache-2.0 OR MIT  | Lokathor |
-| cfg-if              | 1.0.4        | MIT OR Apache-2.0          | rust-lang/cfg-if |
-| codespan-reporting  | 0.11.1       | Apache-2.0                 | brendanzab |
-| core-foundation     | 0.9.4        | MIT OR Apache-2.0          | servo/core-foundation-rs |
-| core-foundation-sys | 0.8.7        | MIT OR Apache-2.0          | servo/core-foundation-rs |
-| core-graphics-types | 0.1.3        | MIT OR Apache-2.0          | servo/core-foundation-rs |
-| equivalent          | 1.0.2        | Apache-2.0 OR MIT          | indexmap-rs |
-| foreign-types       | 0.5.0        | MIT/Apache-2.0             | sfackler |
-| foreign-types-shared| 0.3.1        | MIT/Apache-2.0             | sfackler |
-| hashbrown           | 0.17.0       | MIT OR Apache-2.0          | rust-lang/hashbrown |
-| hexf-parse          | 0.2.1        | CC0-1.0                    | lifthrasiir |
-| indexmap            | 2.14.0       | Apache-2.0 OR MIT          | indexmap-rs |
-| libc                | 0.2.186      | MIT OR Apache-2.0          | rust-lang/libc |
-| libloading          | 0.8.9        | ISC                        | nagisa |
-| lock_api            | 0.4.14       | MIT OR Apache-2.0          | Amanieu/parking_lot |
-| log                 | 0.4.29       | MIT OR Apache-2.0          | rust-lang/log |
-| malloc_buf          | 0.0.6        | MIT                        | Steven Sheldon |
-| metal               | 0.29.0       | MIT OR Apache-2.0          | gfx-rs |
-| naga                | 23.1.0       | MIT OR Apache-2.0          | gfx-rs/wgpu |
-| objc                | 0.2.7        | MIT                        | Steven Sheldon |
-| once_cell           | 1.21.4       | MIT OR Apache-2.0          | matklad |
-| parking_lot         | 0.12.5       | MIT OR Apache-2.0          | Amanieu/parking_lot |
-| parking_lot_core    | 0.9.12       | MIT OR Apache-2.0          | Amanieu/parking_lot |
-| pollster            | 0.4.0        | Apache-2.0/MIT             | zesterer |
-| profiling           | 1.0.18       | MIT OR Apache-2.0          | aclysma |
-| raw-window-handle   | 0.6.2        | MIT OR Apache-2.0 OR Zlib  | rust-windowing |
-| rustc-hash          | 1.1.0        | Apache-2.0/MIT             | rust-lang/rustc-hash |
-| scopeguard          | 1.2.0        | MIT OR Apache-2.0          | bluss |
-| smallvec            | 1.15.1       | MIT OR Apache-2.0          | servo/rust-smallvec |
-| static_assertions   | 1.1.0        | MIT OR Apache-2.0          | nvzqz |
-| termcolor           | 1.4.1        | Unlicense OR MIT           | BurntSushi |
-| thiserror           | 1.0.69       | MIT OR Apache-2.0          | dtolnay |
-| unicode-width       | 0.1.14       | MIT OR Apache-2.0          | unicode-rs |
-| unicode-xid         | 0.2.6        | MIT OR Apache-2.0          | unicode-rs |
-| wgpu                | 23.0.1       | MIT OR Apache-2.0          | gfx-rs/wgpu |
-| wgpu-core           | 23.0.1       | MIT OR Apache-2.0          | gfx-rs/wgpu |
-| wgpu-hal            | 23.0.1       | MIT OR Apache-2.0          | gfx-rs/wgpu |
-| wgpu-types          | 23.0.0       | MIT OR Apache-2.0          | gfx-rs/wgpu |
-
-## 4. SDKs, Toolchains, Test Dependencies, and Local Tools
+## 3. SDKs, Toolchains, Test Dependencies, and Local Tools
 
 Apple Xcode and the macOS SDK, Microsoft Visual Studio and the Windows SDK,
 the DaVinci Resolve OpenFX host, and the Rust toolchain (`cargo`, `rustc`,

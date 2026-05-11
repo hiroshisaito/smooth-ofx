@@ -62,7 +62,7 @@ Uninstall
 Notes
 -----
 
-- CPU-only (no GPU render path).
+- CPU-only.
 - Tile / multi-resolution not supported.
 - Works in 8-bit int, 16-bit int, 16-bit float, and 32-bit float
   working color spaces.

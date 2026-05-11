@@ -56,10 +56,6 @@ rustup target list --installed | grep linux
 # → x86_64-unknown-linux-gnu must be present
 ```
 
-(Future GPU prototype builds with `USE_GPU_CORE=ON` need
-`mesa-vulkan-drivers vulkan-loader vulkan-tools` for wgpu's Vulkan
-backend; not needed for the production CPU path.)
-
 ---
 
 ## 2. Clone and submodule init
@@ -264,8 +260,7 @@ git submodule update --init --recursive
 ### `cargo build` runs for a long time
 → The shipping path (`USE_RUST_CORE=ON`) compiles rayon and its
   transitive deps crate-by-crate on the first run (1–2 minutes).
-  Adding `USE_GPU_CORE=ON` pulls the full wgpu tree on top of that
-  (4–5 minutes). Subsequent builds are seconds.
+  Subsequent builds are seconds.
 
 ### Resolve / Natron doesn't show Smooth
 1. Bundle present at `/usr/OFX/Plugins/smooth.ofx.bundle/Contents/Linux-x86-64/smooth.ofx`?

@@ -55,10 +55,6 @@ rustup target list --installed | grep linux
 # → x86_64-unknown-linux-gnu が表示されること
 ```
 
-(将来的に GPU プロトタイプ `USE_GPU_CORE=ON` で wgpu Vulkan を使う
-場合は `mesa-vulkan-drivers vulkan-loader vulkan-tools` の追加が
-必要だが、本番出荷経路では不要。)
-
 ---
 
 ## 2. リポジトリクローンとサブモジュール初期化
@@ -268,8 +264,7 @@ git submodule update --init --recursive
 ### `cargo build` で長時間かかる
 → 出荷経路 (`USE_RUST_CORE=ON`) では rayon と関連依存クレートを
    初回にクレート単位でコンパイルするため 1-2 分かかるのが正常。
-   `USE_GPU_CORE=ON` を付けた場合は wgpu のフルツリーが追加される
-   ためさらに長時間 (4-5 分) かかる。再ビルドは数秒。
+   再ビルドは数秒。
 
 ### Resolve / Natron に Smooth が現れない
 1. プラグインバンドルが `/usr/OFX/Plugins/smooth.ofx.bundle/Contents/Linux-x86-64/smooth.ofx` に存在するか

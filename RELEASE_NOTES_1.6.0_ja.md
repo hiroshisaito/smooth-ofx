@@ -61,8 +61,7 @@ vs 1.4.0 C++-only ベースライン):
   修正: smoothing 前後で alpha の unpremultiply / premultiply を実施。
 - **transparent オプションが 16-bit / float で動作しない**。白判定を
   16-bit では `0xFFFF` と `0x8000` の両方を許容 (OFX / AE 流の規約差を
-  カバー)、float では `|v − 1.0| < 0.005` の許容差で判定。GPU プロト
-  タイプ経路では kernel 投入前に 1.0 へスナップ。
+  カバー)、float では `|v − 1.0| < 0.005` の許容差で判定。
 - **range スライダで効果が見えない** (典型的なスライダ位置で)。
   display max を 10 → 100 に拡張して、有効な閾値範囲全体に届くように。
 - **build identity がラベル文字列を 2 度表示** (Resolve Inspector)。
@@ -113,34 +112,7 @@ macOS zip / Windows zip / Linux tarball には `smooth.ofx.bundle` +
 アーキ別 `README.txt` + 共通 `RELEASE-NOTES.txt` を同梱。
 SHA-256 digest は `*.sha256` で併記。プラットフォーム別ビルド手順の
 詳細は [BUILDING.md](docs/BUILDING.md) (§ 3.3 Windows MSVC、§ 3.5 Linux、
-§ 10 に CI スケッチ)。
-
-## 実験的機能: GPU プロトタイプ (`USE_GPU_CORE`、デフォルト OFF)
-
-[wgpu](https://wgpu.rs) (Metal / Vulkan / DX12) によるクロスプラット
-フォーム GPU 加速のプロトタイプとして `smooth_gpu` crate を
-`rust/smooth_gpu/` に追加。**デフォルト OFF、配布バイナリには含まれません**。
-
-- ビルド: `-DUSE_GPU_CORE=ON -DUSE_RUST_CORE=OFF` (現状リンク時に相互
-  排他、BUILDING § 9 の Rust ランタイム重複シンボルの説明参照)
-- WGSL kernel: `preprocess` (AE / OFX 両 byte layout) / `mode_flg` 検出 /
-  `link8_square` 中心 handler — それぞれ CPU 参照と byte-identical を検証済
-- ハイブリッドレンダー経路: 8bpc preprocess を GPU、残りは C++ ベース
-  ライン。Effect Controls の **GPU チェックボックス** で実行時に on/off 切替
-- `host_smoke` に `SMOOTH_BENCH_TOGGLE_GPU=1` モード追加、両経路 side-by-side
-  ベンチ可能
-- **本プロトタイプは出荷経路 (`USE_RUST_CORE=ON`) より遅い**。
-  1080p 8-bit で約 22 ms/frame の悪化。GPU の upload/dispatch/readback 往復
-  オーバーヘッドが軽量 preprocess kernel の compute density を上回る、
-  毎フレーム CPU↔GPU バッファ往復の構造的問題。次の 2 方向への足場として
-  ソースに残してある:
-  - **(i)** `smooth_core` を `rlib` 化して `smooth_gpu` に Rust 依存
-    として埋め込み、リンク相互排他を解消 → rayon-CPU + GPU kernel 共存
-  - **(ii)** OFX 1.5 `kOfxImageEffectActionRenderGPU` で host から
-    GPU buffer 直渡し → 往復オーバーヘッド消失
-
-(i) (ii) のいずれかが解禁されるまで、本番構成は
-`USE_RUST_CORE=ON, USE_GPU_CORE=OFF` のまま。
+§ 9 に CI スケッチ)。
 
 ## バージョニング方針
 
